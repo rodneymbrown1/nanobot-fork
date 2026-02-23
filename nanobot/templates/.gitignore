@@ -1,0 +1,11 @@
+# Nanobot workspace .gitignore (committed to live branch)
+# Secrets and runtime state are excluded; only declarative config is tracked.
+
+config.json
+memory/
+data/
+*.log
+*.key
+*.pem
+.env
+__pycache__/
