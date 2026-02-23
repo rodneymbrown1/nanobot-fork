@@ -3,7 +3,9 @@
 import asyncio
 import os
 import re
+import signal
 from pathlib import Path
+from urllib.parse import unquote
 from typing import Any
 
 from nanobot.agent.tools.base import Tool
@@ -73,17 +75,23 @@ class ExecTool(Tool):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=cwd,
+                # Run in a new process group so we can kill all child processes
+                # on timeout without leaving orphans.
+                start_new_session=True,
             )
-            
+
             try:
                 stdout, stderr = await asyncio.wait_for(
                     process.communicate(),
                     timeout=self.timeout
                 )
             except asyncio.TimeoutError:
-                process.kill()
-                # Wait for the process to fully terminate so pipes are
-                # drained and file descriptors are released.
+                # Kill the entire process group to reap child processes too.
+                try:
+                    if process.pid is not None:
+                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
                 try:
                     await asyncio.wait_for(process.wait(), timeout=5.0)
                 except asyncio.TimeoutError:
@@ -129,7 +137,9 @@ class ExecTool(Tool):
                 return "Error: Command blocked by safety guard (not in allowlist)"
 
         if self.restrict_to_workspace:
-            if "..\\" in cmd or "../" in cmd:
+            # Check both literal and URL-decoded forms to catch encoded traversal attempts.
+            decoded_cmd = unquote(cmd)
+            if "..\\" in cmd or "../" in cmd or "..\\" in decoded_cmd or "../" in decoded_cmd:
                 return "Error: Command blocked by safety guard (path traversal detected)"
 
             cwd_path = Path(cwd).resolve()
