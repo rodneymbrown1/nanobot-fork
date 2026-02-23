@@ -30,6 +30,7 @@ class BaseChannel(ABC):
         self.config = config
         self.bus = bus
         self._running = False
+        self._open_access_warned = False
     
     @abstractmethod
     async def start(self) -> None:
@@ -61,19 +62,26 @@ class BaseChannel(ABC):
     def is_allowed(self, sender_id: str) -> bool:
         """
         Check if a sender is allowed to use this bot.
-        
+
         Args:
             sender_id: The sender's identifier.
-        
+
         Returns:
             True if allowed, False otherwise.
         """
         allow_list = getattr(self.config, "allow_from", [])
-        
-        # If no allow list, allow everyone
+
+        # If no allow list, allow everyone — warn once so operators know the bot is open
         if not allow_list:
+            if not self._open_access_warned:
+                logger.warning(
+                    "Channel '{}' has no allowFrom list configured — ALL users are permitted. "
+                    "Set allowFrom in your config to restrict access.",
+                    self.name,
+                )
+                self._open_access_warned = True
             return True
-        
+
         sender_str = str(sender_id)
         if sender_str in allow_list:
             return True

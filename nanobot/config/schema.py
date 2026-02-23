@@ -120,7 +120,7 @@ class MochatConfig(Base):
     watch_timeout_ms: int = 25000
     watch_limit: int = 100
     retry_delay_ms: int = 500
-    max_retry_attempts: int = 0  # 0 means unlimited retries
+    max_retry_attempts: int = 10  # Maximum retry attempts (0 = unlimited, not recommended)
     claw_token: str = ""
     agent_user_id: str = ""
     sessions: list[str] = Field(default_factory=list)
@@ -231,7 +231,7 @@ class ProvidersConfig(Base):
 class GatewayConfig(Base):
     """Gateway/server configuration."""
 
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 18790
 
 
