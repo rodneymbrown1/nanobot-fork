@@ -1,0 +1,22 @@
+name: Deploy Live Branch
+
+on:
+  push:
+    branches: [live]
+
+jobs:
+  deploy:
+    name: Deploy to Lightsail
+    runs-on: ubuntu-latest
+    # Skip deploy for reconcile commits (pushed by nanobot itself)
+    # Only PR merges and manual pushes trigger actual deployment
+    if: "!startsWith(github.event.head_commit.message, 'reconcile:')"
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: root
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: /opt/nanobot/apply-live.sh
