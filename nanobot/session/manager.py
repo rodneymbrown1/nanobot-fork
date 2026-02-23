@@ -4,7 +4,7 @@ import json
 import shutil
 from pathlib import Path
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from loguru import logger
@@ -76,6 +76,10 @@ class SessionManager:
     Sessions are stored as JSONL files in the sessions directory.
     """
 
+    # Sessions inactive longer than this are evicted from the in-memory cache.
+    # Disk files are preserved so history can be reloaded on demand.
+    SESSION_TTL = timedelta(days=30)
+
     def __init__(self, workspace: Path):
         self.workspace = workspace
         self.sessions_dir = ensure_dir(self.workspace / "sessions")
@@ -95,22 +99,44 @@ class SessionManager:
     def get_or_create(self, key: str) -> Session:
         """
         Get an existing session or create a new one.
-        
+
+        Sessions that have been inactive longer than SESSION_TTL are evicted
+        from the in-memory cache (disk files are kept for auditing).
+
         Args:
             key: Session key (usually channel:chat_id).
-        
+
         Returns:
             The session.
         """
         if key in self._cache:
-            return self._cache[key]
-        
+            session = self._cache[key]
+            if datetime.now() - session.updated_at > self.SESSION_TTL:
+                logger.info(
+                    "Session {} has been inactive for over {} days; evicting from cache.",
+                    key,
+                    self.SESSION_TTL.days,
+                )
+                del self._cache[key]
+            else:
+                return session
+
         session = self._load(key)
         if session is None:
             session = Session(key=key)
-        
+
         self._cache[key] = session
         return session
+
+    def evict_stale(self) -> int:
+        """Evict all sessions that have exceeded SESSION_TTL. Returns eviction count."""
+        cutoff = datetime.now() - self.SESSION_TTL
+        stale = [k for k, s in self._cache.items() if s.updated_at < cutoff]
+        for k in stale:
+            del self._cache[k]
+        if stale:
+            logger.info("Evicted {} stale session(s) from cache.", len(stale))
+        return len(stale)
     
     def _load(self, key: str) -> Session | None:
         """Load a session from disk."""
