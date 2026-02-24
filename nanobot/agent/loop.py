@@ -27,7 +27,7 @@ from nanobot.providers.base import LLMProvider
 from nanobot.session.manager import Session, SessionManager
 
 if TYPE_CHECKING:
-    from nanobot.config.schema import ChannelsConfig, ExecToolConfig
+    from nanobot.config.schema import ChannelsConfig, ExecToolConfig, IntegrationsConfig
     from nanobot.cron.service import CronService
 
 
@@ -61,6 +61,7 @@ class AgentLoop:
         mcp_servers: dict | None = None,
         mcp_allowed_commands: list[str] | None = None,
         channels_config: ChannelsConfig | None = None,
+        integrations_config: IntegrationsConfig | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig
         self.bus = bus
@@ -92,6 +93,7 @@ class AgentLoop:
             restrict_to_workspace=restrict_to_workspace,
         )
 
+        self.integrations_config = integrations_config
         self._running = False
         self._mcp_servers = mcp_servers or {}
         self._mcp_allowed_commands = mcp_allowed_commands or []
@@ -119,6 +121,39 @@ class AgentLoop:
         self.tools.register(SpawnTool(manager=self.subagents))
         if self.cron_service:
             self.tools.register(CronTool(self.cron_service))
+
+        # Jira tools (conditional on credentials)
+        if self.integrations_config:
+            jira_cfg = self.integrations_config.jira
+            if jira_cfg.api_token and jira_cfg.email and jira_cfg.base_url:
+                from nanobot.agent.tools.jira import (
+                    JiraAddCommentTool, JiraCreateIssueTool, JiraGetIssueTool,
+                    JiraListIssuesTool, JiraSearchTool, JiraUpdateIssueTool,
+                    _JiraClient,
+                )
+                jira_client = _JiraClient(jira_cfg.base_url, jira_cfg.email, jira_cfg.api_token)
+                self.tools.register(JiraCreateIssueTool(jira_client, jira_cfg.default_project))
+                self.tools.register(JiraListIssuesTool(jira_client, jira_cfg.default_project))
+                self.tools.register(JiraGetIssueTool(jira_client))
+                self.tools.register(JiraUpdateIssueTool(jira_client))
+                self.tools.register(JiraAddCommentTool(jira_client))
+                self.tools.register(JiraSearchTool(jira_client))
+
+            # Notion tools (conditional on api_key)
+            notion_cfg = self.integrations_config.notion
+            if notion_cfg.api_key:
+                from nanobot.agent.tools.notion import (
+                    NotionCreateDatabaseEntryTool, NotionCreatePageTool,
+                    NotionGetPageTool, NotionQueryDatabaseTool, NotionSearchTool,
+                    NotionUpdatePageTool, _NotionClient,
+                )
+                notion_client = _NotionClient(notion_cfg.api_key)
+                self.tools.register(NotionCreatePageTool(notion_client, notion_cfg.root_page_id))
+                self.tools.register(NotionGetPageTool(notion_client))
+                self.tools.register(NotionUpdatePageTool(notion_client))
+                self.tools.register(NotionSearchTool(notion_client))
+                self.tools.register(NotionCreateDatabaseEntryTool(notion_client))
+                self.tools.register(NotionQueryDatabaseTool(notion_client))
 
     async def _connect_mcp(self) -> None:
         """Connect to configured MCP servers (one-time, lazy)."""

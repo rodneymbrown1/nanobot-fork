@@ -149,6 +149,36 @@ def main(
 
 
 # ============================================================================
+# Deploy
+# ============================================================================
+
+
+@app.command()
+def deploy(
+    secrets_only: bool = typer.Option(False, "--secrets-only", help="Only collect and upload secrets"),
+    image_only: bool = typer.Option(False, "--image-only", help="Only build and push Docker image"),
+    restart_only: bool = typer.Option(False, "--restart-only", help="Only restart the container"),
+    skip_cdk: bool = typer.Option(False, "--skip-cdk", help="Skip CDK infrastructure deploy"),
+    skip_image: bool = typer.Option(False, "--skip-image", help="Skip Docker image build/push"),
+    with_workspace: bool = typer.Option(False, "--with-workspace", help="Upload workspace files"),
+    region: str = typer.Option("us-east-1", "--region", help="AWS region"),
+):
+    """Deploy nanobot to AWS Lightsail."""
+    from nanobot.cli.deploy import DeployFlow
+
+    flow = DeployFlow(
+        region=region,
+        secrets_only=secrets_only,
+        image_only=image_only,
+        restart_only=restart_only,
+        skip_cdk=skip_cdk,
+        skip_image=skip_image,
+        with_workspace=with_workspace,
+    )
+    flow.run()
+
+
+# ============================================================================
 # Onboard / Setup
 # ============================================================================
 
@@ -320,6 +350,7 @@ def gateway(
         mcp_servers=config.tools.mcp_servers,
         mcp_allowed_commands=config.tools.mcp_allowed_commands or None,
         channels_config=config.channels,
+        integrations_config=config.integrations,
     )
     
     # Set cron callback (needs agent)
@@ -489,8 +520,9 @@ def agent(
         restrict_to_workspace=config.tools.restrict_to_workspace,
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
+        integrations_config=config.integrations,
     )
-    
+
     # Show spinner when logs are off (no output to miss); skip when logs are on
     def _thinking_ctx():
         if logs:
@@ -943,6 +975,7 @@ def cron_run(
         restrict_to_workspace=config.tools.restrict_to_workspace,
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
+        integrations_config=config.integrations,
     )
 
     store_path = get_data_dir() / "cron" / "jobs.json"
@@ -1096,6 +1129,125 @@ def _login_github_copilot() -> None:
     except Exception as e:
         console.print(f"[red]Authentication error: {e}[/red]")
         raise typer.Exit(1)
+
+
+# ============================================================================
+# Notion OAuth
+# ============================================================================
+
+
+@app.command("notion-auth")
+def notion_auth():
+    """Authenticate with Notion via OAuth and save the access token."""
+    import threading
+    import webbrowser
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    from urllib.parse import urlparse, parse_qs
+
+    from nanobot.config.loader import load_config, save_config
+
+    config = load_config()
+    notion = config.integrations.notion
+
+    if not notion.oauth_client_id or not notion.oauth_client_secret:
+        console.print("[red]Error: integrations.notion.oauthClientId and oauthClientSecret must be set in config.json[/red]")
+        raise typer.Exit(1)
+
+    if not notion.authorization_url:
+        console.print("[red]Error: integrations.notion.authorizationUrl must be set in config.json[/red]")
+        raise typer.Exit(1)
+
+    redirect_uri = notion.redirect_uri
+    parsed = urlparse(redirect_uri)
+    port = parsed.port or 9876
+
+    auth_code_holder: list[str] = []
+    server_ready = threading.Event()
+
+    class CallbackHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            qs = parse_qs(urlparse(self.path).query)
+            code = qs.get("code", [None])[0]
+            if code:
+                auth_code_holder.append(code)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"<h2>Notion authorization successful! You can close this tab.</h2>")
+            else:
+                error = qs.get("error", ["unknown"])[0]
+                self.send_response(400)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(f"<h2>Authorization failed: {error}</h2>".encode())
+
+        def log_message(self, format, *args):
+            pass  # Suppress HTTP server logs
+
+    console.print(f"{__logo__} Notion OAuth Login\n")
+    console.print(f"[cyan]Starting callback server on port {port}...[/cyan]")
+
+    server = HTTPServer(("127.0.0.1", port), CallbackHandler)
+
+    def _serve():
+        server_ready.set()
+        server.handle_request()  # Handle exactly one request
+
+    thread = threading.Thread(target=_serve, daemon=True)
+    thread.start()
+    server_ready.wait()
+
+    console.print("[cyan]Opening browser for Notion authorization...[/cyan]\n")
+    webbrowser.open(notion.authorization_url)
+    console.print(f"[dim]If the browser didn't open, visit:[/dim]\n{notion.authorization_url}\n")
+
+    thread.join(timeout=120)
+    server.server_close()
+
+    if not auth_code_holder:
+        console.print("[red]Timed out waiting for authorization callback.[/red]")
+        raise typer.Exit(1)
+
+    code = auth_code_holder[0]
+    console.print("[cyan]Exchanging code for access token...[/cyan]")
+
+    import httpx
+    from base64 import b64encode
+
+    credentials = b64encode(f"{notion.oauth_client_id}:{notion.oauth_client_secret}".encode()).decode()
+
+    try:
+        r = httpx.post(
+            "https://api.notion.com/v1/oauth/token",
+            headers={
+                "Authorization": f"Basic {credentials}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+            timeout=30.0,
+        )
+        r.raise_for_status()
+        token_data = r.json()
+    except Exception as e:
+        console.print(f"[red]Token exchange failed: {e}[/red]")
+        raise typer.Exit(1)
+
+    access_token = token_data.get("access_token", "")
+    if not access_token:
+        console.print(f"[red]No access_token in response: {token_data}[/red]")
+        raise typer.Exit(1)
+
+    # Save token into config
+    config.integrations.notion.api_key = access_token
+    save_config(config)
+
+    workspace_name = token_data.get("workspace_name", "")
+    console.print(f"\n[green]Notion connected![/green]  Workspace: {workspace_name}")
+    console.print("Notion tools are now available to the agent.")
 
 
 if __name__ == "__main__":

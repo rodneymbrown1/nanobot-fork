@@ -201,14 +201,50 @@ class ToolsConfig(Base):
     )  # Only these commands can run as MCP stdio servers
 
 
+class AgentIdentityConfig(Base):
+    """Agent identity configuration."""
+
+    email: str = ""  # Agent's email address (e.g. for sending emails, calendar invites)
+    email_app_password: str = ""  # Gmail app password for SMTP (https://myaccount.google.com/apppasswords)
+
+
+class NotionConfig(Base):
+    """Notion integration configuration."""
+
+    api_key: str = ""  # Internal integration token (secret_...)
+    oauth_client_id: str = ""  # OAuth client ID for public integrations
+    oauth_client_secret: str = ""  # OAuth client secret
+    authorization_url: str = ""  # Full OAuth authorization URL
+    root_page_id: str = ""  # Optional: default parent page for new pages
+    redirect_uri: str = "http://localhost:9876/callback"  # OAuth callback URI
+
+
+class JiraConfig(Base):
+    """Jira integration configuration."""
+
+    api_token: str = ""  # API token from https://id.atlassian.com/manage-profile/security/api-tokens
+    email: str = ""  # Atlassian account email
+    base_url: str = ""  # e.g. https://yourteam.atlassian.net
+    default_project: str = ""  # Default project key (e.g. "DEVPRO")
+
+
+class IntegrationsConfig(Base):
+    """Third-party service integrations."""
+
+    notion: NotionConfig = Field(default_factory=NotionConfig)
+    jira: JiraConfig = Field(default_factory=JiraConfig)
+
+
 class Config(BaseSettings):
     """Root configuration for nanobot."""
 
+    agent_identity: AgentIdentityConfig = Field(default_factory=AgentIdentityConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
 
     @property
     def workspace_path(self) -> Path:
