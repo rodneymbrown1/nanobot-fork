@@ -57,10 +57,19 @@ echo "$ENV_SHAPE" | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$ENV_TEMPLATE
 echo "Generated $ENV_TEMPLATE"
 
 # Update env_shape in stack-manifest.json (create if missing)
-if [ -f "$MANIFEST" ]; then
-  UPDATED=$(jq --argjson shape "$ENV_SHAPE" '.env_shape = $shape' "$MANIFEST")
-  echo "$UPDATED" > "$MANIFEST"
-  echo "Updated env_shape in $MANIFEST"
-else
-  echo "Warning: $MANIFEST not found, skipping env_shape update" >&2
+if [ ! -f "$MANIFEST" ]; then
+  cat > "$MANIFEST" << 'INIT_MANIFEST'
+{
+  "version": 1,
+  "skills": [],
+  "mcp_servers": [],
+  "cron_jobs": [],
+  "env_shape": {}
+}
+INIT_MANIFEST
+  echo "Created $MANIFEST"
 fi
+
+UPDATED=$(jq --argjson shape "$ENV_SHAPE" '.env_shape = $shape' "$MANIFEST")
+echo "$UPDATED" > "$MANIFEST"
+echo "Updated env_shape in $MANIFEST"
