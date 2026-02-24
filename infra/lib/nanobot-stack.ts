@@ -16,6 +16,17 @@ export class NanobotStack extends cdk.Stack {
     const bundleId: string = this.node.tryGetContext('bundleId') ?? 'small_3_0';
     const diskSizeGb: number = this.node.tryGetContext('diskSizeGb') ?? 20;
 
+    // SSH CIDR — REQUIRED. No default. Restrict to your office/home IP.
+    // Pass via: cdk deploy --context sshCidrs='["1.2.3.4/32"]'
+    const sshCidrs: string[] | undefined = this.node.tryGetContext('sshCidrs');
+    if (!sshCidrs || sshCidrs.length === 0) {
+      throw new Error(
+        'Missing required context: sshCidrs. ' +
+        'Pass your IP CIDR to restrict SSH access: ' +
+        '--context sshCidrs=\'["YOUR_IP/32"]\''
+      );
+    }
+
     // ── 1. ECR repository ─────────────────────────────────────────────────────
     // The Docker image is built locally and pushed here before deploying.
     // Repository is RETAINED on stack destroy to avoid accidental image loss.
@@ -138,8 +149,8 @@ export class NanobotStack extends cdk.Stack {
       userData: userDataScript,
       networking: {
         ports: [
-          // SSH — restrict cidrs to your office/home IP for hardening
-          { fromPort: 22, toPort: 22, protocol: 'tcp', cidrs: ['0.0.0.0/0'] },
+          // SSH — restricted to operator-specified CIDRs (no default)
+          { fromPort: 22, toPort: 22, protocol: 'tcp', cidrs: sshCidrs },
           // HTTP — needed for Let's Encrypt ACME challenges
           { fromPort: 80, toPort: 80, protocol: 'tcp', cidrs: ['0.0.0.0/0'] },
           // HTTPS — public TLS endpoint (proxied to port 18790 by nginx)
