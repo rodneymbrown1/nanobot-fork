@@ -26,16 +26,16 @@ class ProviderSpec:
     """
 
     # identity
-    name: str                       # config field name, e.g. "dashscope"
+    name: str                       # config field name, e.g. "deepseek"
     keywords: tuple[str, ...]       # model-name keywords for matching (lowercase)
-    env_key: str                    # LiteLLM env var, e.g. "DASHSCOPE_API_KEY"
+    env_key: str                    # LiteLLM env var, e.g. "DEEPSEEK_API_KEY"
     display_name: str = ""          # shown in `nanobot status`
 
     # model prefixing
-    litellm_prefix: str = ""                 # "dashscope" → model becomes "dashscope/{model}"
+    litellm_prefix: str = ""                 # "deepseek" → model becomes "deepseek/{model}"
     skip_prefixes: tuple[str, ...] = ()      # don't prefix if model already starts with these
 
-    # extra env vars, e.g. (("ZHIPUAI_API_KEY", "{api_key}"),)
+    # extra env vars, e.g. (("CUSTOM_API_KEY", "{api_key}"),)
     env_extras: tuple[tuple[str, str], ...] = ()
 
     # gateway / local detection
@@ -101,62 +101,6 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         strip_model_prefix=False,
         model_overrides=(),
         supports_prompt_caching=True,
-    ),
-
-    # AiHubMix: global gateway, OpenAI-compatible interface.
-    # strip_model_prefix=True: it doesn't understand "anthropic/claude-3",
-    # so we strip to bare "claude-3" then re-prefix as "openai/claude-3".
-    ProviderSpec(
-        name="aihubmix",
-        keywords=("aihubmix",),
-        env_key="OPENAI_API_KEY",           # OpenAI-compatible
-        display_name="AiHubMix",
-        litellm_prefix="openai",            # → openai/{model}
-        skip_prefixes=(),
-        env_extras=(),
-        is_gateway=True,
-        is_local=False,
-        detect_by_key_prefix="",
-        detect_by_base_keyword="aihubmix",
-        default_api_base="https://aihubmix.com/v1",
-        strip_model_prefix=True,            # anthropic/claude-3 → claude-3 → openai/claude-3
-        model_overrides=(),
-    ),
-
-    # SiliconFlow (硅基流动): OpenAI-compatible gateway, model names keep org prefix
-    ProviderSpec(
-        name="siliconflow",
-        keywords=("siliconflow",),
-        env_key="OPENAI_API_KEY",
-        display_name="SiliconFlow",
-        litellm_prefix="openai",
-        skip_prefixes=(),
-        env_extras=(),
-        is_gateway=True,
-        is_local=False,
-        detect_by_key_prefix="",
-        detect_by_base_keyword="siliconflow",
-        default_api_base="https://api.siliconflow.cn/v1",
-        strip_model_prefix=False,
-        model_overrides=(),
-    ),
-
-    # VolcEngine (火山引擎): OpenAI-compatible gateway
-    ProviderSpec(
-        name="volcengine",
-        keywords=("volcengine", "volces", "ark"),
-        env_key="OPENAI_API_KEY",
-        display_name="VolcEngine",
-        litellm_prefix="volcengine",
-        skip_prefixes=(),
-        env_extras=(),
-        is_gateway=True,
-        is_local=False,
-        detect_by_key_prefix="",
-        detect_by_base_keyword="volces",
-        default_api_base="https://ark.cn-beijing.volces.com/api/v3",
-        strip_model_prefix=False,
-        model_overrides=(),
     ),
 
     # === Standard providers (matched by model-name keywords) ===============
@@ -272,89 +216,6 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         model_overrides=(),
     ),
 
-    # Zhipu: LiteLLM uses "zai/" prefix.
-    # Also mirrors key to ZHIPUAI_API_KEY (some LiteLLM paths check that).
-    # skip_prefixes: don't add "zai/" when already routed via gateway.
-    ProviderSpec(
-        name="zhipu",
-        keywords=("zhipu", "glm", "zai"),
-        env_key="ZAI_API_KEY",
-        display_name="Zhipu AI",
-        litellm_prefix="zai",              # glm-4 → zai/glm-4
-        skip_prefixes=("zhipu/", "zai/", "openrouter/", "hosted_vllm/"),
-        env_extras=(
-            ("ZHIPUAI_API_KEY", "{api_key}"),
-        ),
-        is_gateway=False,
-        is_local=False,
-        detect_by_key_prefix="",
-        detect_by_base_keyword="",
-        default_api_base="",
-        strip_model_prefix=False,
-        model_overrides=(),
-    ),
-
-    # DashScope: Qwen models, needs "dashscope/" prefix.
-    ProviderSpec(
-        name="dashscope",
-        keywords=("qwen", "dashscope"),
-        env_key="DASHSCOPE_API_KEY",
-        display_name="DashScope",
-        litellm_prefix="dashscope",         # qwen-max → dashscope/qwen-max
-        skip_prefixes=("dashscope/", "openrouter/"),
-        env_extras=(),
-        is_gateway=False,
-        is_local=False,
-        detect_by_key_prefix="",
-        detect_by_base_keyword="",
-        default_api_base="",
-        strip_model_prefix=False,
-        model_overrides=(),
-    ),
-
-    # Moonshot: Kimi models, needs "moonshot/" prefix.
-    # LiteLLM requires MOONSHOT_API_BASE env var to find the endpoint.
-    # Kimi K2.5 API enforces temperature >= 1.0.
-    ProviderSpec(
-        name="moonshot",
-        keywords=("moonshot", "kimi"),
-        env_key="MOONSHOT_API_KEY",
-        display_name="Moonshot",
-        litellm_prefix="moonshot",          # kimi-k2.5 → moonshot/kimi-k2.5
-        skip_prefixes=("moonshot/", "openrouter/"),
-        env_extras=(
-            ("MOONSHOT_API_BASE", "{api_base}"),
-        ),
-        is_gateway=False,
-        is_local=False,
-        detect_by_key_prefix="",
-        detect_by_base_keyword="",
-        default_api_base="https://api.moonshot.ai/v1",   # intl; use api.moonshot.cn for China
-        strip_model_prefix=False,
-        model_overrides=(
-            ("kimi-k2.5", {"temperature": 1.0}),
-        ),
-    ),
-
-    # MiniMax: needs "minimax/" prefix for LiteLLM routing.
-    # Uses OpenAI-compatible API at api.minimax.io/v1.
-    ProviderSpec(
-        name="minimax",
-        keywords=("minimax",),
-        env_key="MINIMAX_API_KEY",
-        display_name="MiniMax",
-        litellm_prefix="minimax",            # MiniMax-M2.1 → minimax/MiniMax-M2.1
-        skip_prefixes=("minimax/", "openrouter/"),
-        env_extras=(),
-        is_gateway=False,
-        is_local=False,
-        detect_by_key_prefix="",
-        detect_by_base_keyword="",
-        default_api_base="https://api.minimax.io/v1",
-        strip_model_prefix=False,
-        model_overrides=(),
-    ),
-
     # === Local deployment (matched by config key, NOT by api_base) =========
 
     # vLLM / any OpenAI-compatible local server.
@@ -433,7 +294,7 @@ def find_gateway(
     Priority:
       1. provider_name — if it maps to a gateway/local spec, use it directly.
       2. api_key prefix — e.g. "sk-or-" → OpenRouter.
-      3. api_base keyword — e.g. "aihubmix" in URL → AiHubMix.
+      3. api_base keyword — e.g. "openrouter" in URL → OpenRouter.
 
     A standard provider with a custom api_base (e.g. DeepSeek behind a proxy)
     will NOT be mistaken for vLLM — the old fallback is gone.
@@ -455,7 +316,7 @@ def find_gateway(
 
 
 def find_by_name(name: str) -> ProviderSpec | None:
-    """Find a provider spec by config field name, e.g. "dashscope"."""
+    """Find a provider spec by config field name, e.g. "deepseek"."""
     for spec in PROVIDERS:
         if spec.name == name:
             return spec
