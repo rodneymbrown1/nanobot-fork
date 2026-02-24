@@ -33,6 +33,9 @@ WORKDIR /app
 # Create config directory
 RUN mkdir -p /root/.nanobot
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["nanobot", "status"]
+
 # Gateway default port
 EXPOSE 18790
 
