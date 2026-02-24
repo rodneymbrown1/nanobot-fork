@@ -59,6 +59,7 @@ class AgentLoop:
         restrict_to_workspace: bool = False,
         session_manager: SessionManager | None = None,
         mcp_servers: dict | None = None,
+        mcp_allowed_commands: list[str] | None = None,
         channels_config: ChannelsConfig | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig
@@ -93,6 +94,7 @@ class AgentLoop:
 
         self._running = False
         self._mcp_servers = mcp_servers or {}
+        self._mcp_allowed_commands = mcp_allowed_commands or []
         self._mcp_stack: AsyncExitStack | None = None
         self._mcp_connected = False
         self._mcp_connecting = False
@@ -127,7 +129,10 @@ class AgentLoop:
         try:
             self._mcp_stack = AsyncExitStack()
             await self._mcp_stack.__aenter__()
-            await connect_mcp_servers(self._mcp_servers, self.tools, self._mcp_stack)
+            await connect_mcp_servers(
+                self._mcp_servers, self.tools, self._mcp_stack,
+                allowed_commands=self._mcp_allowed_commands or None,
+            )
             self._mcp_connected = True
         except Exception as e:
             logger.error("Failed to connect MCP servers (will retry next message): {}", e)

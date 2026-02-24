@@ -54,15 +54,30 @@ class MCPToolWrapper(Tool):
 
 
 async def connect_mcp_servers(
-    mcp_servers: dict, registry: ToolRegistry, stack: AsyncExitStack
+    mcp_servers: dict,
+    registry: ToolRegistry,
+    stack: AsyncExitStack,
+    allowed_commands: list[str] | None = None,
 ) -> None:
-    """Connect to configured MCP servers and register their tools."""
+    """Connect to configured MCP servers and register their tools.
+
+    Args:
+        allowed_commands: If set, only these commands are permitted for stdio
+            MCP servers. Servers with unlisted commands are rejected.
+    """
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
     for name, cfg in mcp_servers.items():
         try:
             if cfg.command:
+                # Enforce command allowlist when configured
+                if allowed_commands and cfg.command not in allowed_commands:
+                    logger.warning(
+                        "MCP server '{}': command '{}' not in allowed list ({}), skipping",
+                        name, cfg.command, allowed_commands,
+                    )
+                    continue
                 params = StdioServerParameters(
                     command=cfg.command, args=cfg.args, env=cfg.env or None
                 )

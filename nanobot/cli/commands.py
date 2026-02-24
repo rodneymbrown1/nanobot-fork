@@ -318,6 +318,7 @@ def gateway(
         restrict_to_workspace=config.tools.restrict_to_workspace,
         session_manager=session_manager,
         mcp_servers=config.tools.mcp_servers,
+        mcp_allowed_commands=config.tools.mcp_allowed_commands or None,
         channels_config=config.channels,
     )
     
