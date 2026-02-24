@@ -8,16 +8,28 @@ from nanobot.agent.tools.base import Tool
 
 
 def _resolve_path(path: str, workspace: Path | None = None, allowed_dir: Path | None = None) -> Path:
-    """Resolve path against workspace (if relative) and enforce directory restriction."""
+    """Resolve path against workspace (if relative) and enforce directory restriction.
+
+    Security checks:
+    - Symlinks are resolved before the sandbox check, preventing symlink escape.
+    - Only regular files and directories are allowed (no device files, pipes, etc.).
+    """
     p = Path(path).expanduser()
     if not p.is_absolute() and workspace:
         p = workspace / p
-    resolved = p.resolve()
+    resolved = p.resolve()  # follows symlinks
+
+    # Enforce sandbox: resolved path must be within allowed_dir
     if allowed_dir:
         try:
             resolved.relative_to(allowed_dir.resolve())
         except ValueError:
             raise PermissionError(f"Path {path} is outside allowed directory {allowed_dir}")
+
+    # Block non-regular files (device files, named pipes, sockets)
+    if resolved.exists() and not resolved.is_file() and not resolved.is_dir():
+        raise PermissionError(f"Path {path} is not a regular file or directory")
+
     return resolved
 
 
