@@ -1,6 +1,52 @@
 {
   "version": 1,
-  "skills": [],
+  "skills": [
+    {
+      "name": "clawhub",
+      "source": "builtin",
+      "installed_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "name": "cron",
+      "source": "builtin",
+      "installed_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "name": "github",
+      "source": "builtin",
+      "installed_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "name": "memory",
+      "source": "builtin",
+      "installed_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "name": "reconciler",
+      "source": "builtin",
+      "installed_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "name": "skill-creator",
+      "source": "builtin",
+      "installed_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "name": "summarize",
+      "source": "builtin",
+      "installed_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "name": "tmux",
+      "source": "builtin",
+      "installed_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "name": "weather",
+      "source": "builtin",
+      "installed_at": "2026-02-23T00:00:00Z"
+    }
+  ],
   "mcp_servers": [],
   "cron_jobs": [],
   "env_shape": {}
