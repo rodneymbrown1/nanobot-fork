@@ -395,12 +395,28 @@ def gateway(
         console.print(f"[green]✓[/green] Channels enabled: {', '.join(channels.enabled_channels)}")
     else:
         console.print("[yellow]Warning: No channels enabled[/yellow]")
-    
+
     cron_status = cron.status()
     if cron_status["jobs"] > 0:
         console.print(f"[green]✓[/green] Cron: {cron_status['jobs']} scheduled jobs")
-    
+
     console.print(f"[green]✓[/green] Heartbeat: every 30m")
+
+    # ── Security posture warnings ───────────────────────────────────────────
+    if not config.tools.restrict_to_workspace:
+        console.print(
+            "[yellow]Warning: restrict_to_workspace is OFF — filesystem and shell "
+            "tools have unrestricted access. Set tools.restrictToWorkspace=true "
+            "in config.json to sandbox.[/yellow]"
+        )
+    # Check for channels with no allowFrom list
+    for ch_name in channels.enabled_channels:
+        ch_cfg = getattr(config.channels, ch_name, None)
+        if ch_cfg and not getattr(ch_cfg, "allow_from", None):
+            console.print(
+                f"[yellow]Warning: Channel '{ch_name}' has no allowFrom list — "
+                f"ALL users can interact. Set channels.{ch_name}.allowFrom in config.[/yellow]"
+            )
     
     async def run():
         try:
