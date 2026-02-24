@@ -1,13 +1,20 @@
 """Configuration loading utilities."""
 
 import json
+import os
 from pathlib import Path
 
 from nanobot.config.schema import Config
 
 
 def get_config_path() -> Path:
-    """Get the default configuration file path."""
+    """Get the default configuration file path.
+
+    Respects the NANOBOT_CONFIG_PATH env var if set.
+    """
+    env_path = os.environ.get("NANOBOT_CONFIG_PATH")
+    if env_path:
+        return Path(env_path)
     return Path.home() / ".nanobot" / "config.json"
 
 
@@ -39,6 +46,7 @@ def load_config(config_path: Path | None = None) -> Config:
             print(f"Warning: Failed to load config from {path}: {e}")
             print("Using default configuration.")
 
+    # No config file — Config (BaseSettings) reads NANOBOT_* env vars automatically
     return Config()
 
 
