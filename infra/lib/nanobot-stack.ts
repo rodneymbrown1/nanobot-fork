@@ -18,7 +18,9 @@ export class NanobotStack extends cdk.Stack {
 
     // SSH CIDR — REQUIRED. No default. Restrict to your office/home IP.
     // Pass via: cdk deploy --context sshCidrs='["1.2.3.4/32"]'
-    const sshCidrs: string[] | undefined = this.node.tryGetContext('sshCidrs');
+    const rawCidrs = this.node.tryGetContext('sshCidrs');
+    const sshCidrs: string[] | undefined =
+      typeof rawCidrs === 'string' ? JSON.parse(rawCidrs) : rawCidrs;
     if (!sshCidrs || sshCidrs.length === 0) {
       throw new Error(
         'Missing required context: sshCidrs. ' +
