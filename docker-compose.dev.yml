@@ -1,0 +1,47 @@
+# docker-compose.dev.yml — Dev compose that reads everything from .env
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml build
+#   docker compose -f docker-compose.dev.yml up -d nanobot-gateway
+#   docker compose -f docker-compose.dev.yml logs -f nanobot-gateway
+#   docker compose -f docker-compose.dev.yml exec nanobot-gateway nanobot agent -m "hello"
+#
+# All secrets and config flow from .env → loader.py _ENV_MAP → config.
+# No config.json needed for secrets — .env is the single source of truth.
+# config.json still wins if both are set (for overrides).
+
+x-common: &common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file: .env
+  volumes:
+    - ~/.nanobot:/root/.nanobot
+
+services:
+  nanobot-gateway:
+    container_name: nanobot-gateway-dev
+    <<: *common
+    command: ["gateway"]
+    restart: unless-stopped
+    ports:
+      - "18790:18790"
+    environment:
+      # Bind to all interfaces inside the container so port mapping works
+      - NANOBOT_GATEWAY_HOST=0.0.0.0
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  nanobot-cli:
+    <<: *common
+    profiles:
+      - cli
+    command: ["status"]
+    stdin_open: true
+    tty: true
