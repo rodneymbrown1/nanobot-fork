@@ -1,18 +1,42 @@
 name: Deploy Live Branch
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches: [live]
 
 jobs:
   deploy:
-    name: Deploy to Lightsail
+    name: Build & Deploy to Lightsail
     runs-on: ubuntu-latest
-    # Skip deploy for reconcile commits (pushed by nanobot itself)
-    # Only PR merges and manual pushes trigger actual deployment
-    if: "!startsWith(github.event.head_commit.message, 'reconcile:')"
+    if: github.event.pull_request.merged == true
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          ECR_REPOSITORY: nanobot
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
