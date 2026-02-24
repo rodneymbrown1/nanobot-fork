@@ -55,3 +55,7 @@ cron(action="remove", job_id="abc123")
 ## Timezone
 
 Use `tz` with `cron_expr` to schedule in a specific IANA timezone. Without `tz`, the server's local timezone is used.
+
+## Reconciliation
+
+After adding or removing a cron job, run the **reconciler** skill to update `stack-manifest.json` and push the change to the `live` branch.

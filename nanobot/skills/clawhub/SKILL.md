@@ -51,3 +51,4 @@ npx --yes clawhub@latest list --workdir ~/.nanobot/workspace
 - Login (`npx --yes clawhub@latest login`) is only required for publishing.
 - `--workdir ~/.nanobot/workspace` is critical — without it, skills install to the current directory instead of the nanobot workspace.
 - After install, remind the user to start a new session to load the skill.
+- After installing, updating, or removing a skill, run the **reconciler** skill to update `stack-manifest.json` and push the change to the `live` branch.
