@@ -25,15 +25,35 @@ class ExecTool(Tool):
         self.timeout = timeout
         self.working_dir = working_dir
         self.deny_patterns = deny_patterns or [
-            r"\brm\s+-[rf]{1,2}\b",          # rm -r, rm -rf, rm -fr
-            r"\bdel\s+/[fq]\b",              # del /f, del /q
-            r"\brmdir\s+/s\b",               # rmdir /s
-            r"(?:^|[;&|]\s*)format\b",       # format (as standalone command only)
-            r"\b(mkfs|diskpart)\b",          # disk operations
-            r"\bdd\s+if=",                   # dd
-            r">\s*/dev/sd",                  # write to disk
-            r"\b(shutdown|reboot|poweroff)\b",  # system power
-            r":\(\)\s*\{.*\};\s*:",          # fork bomb
+            # Destructive file/disk operations
+            r"\brm\s+-[rf]{1,2}\b",
+            r"\bdel\s+/[fq]\b",
+            r"\brmdir\s+/s\b",
+            r"(?:^|[;&|]\s*)format\b",
+            r"\b(mkfs|diskpart)\b",
+            r"\bdd\s+if=",
+            r">\s*/dev/sd",
+            r"\b(shutdown|reboot|poweroff)\b",
+            r":\(\)\s*\{.*\};\s*:",
+            # Meta-execution vectors
+            r"\beval\b",
+            r"\bexec\b",
+            r"\bbash\s+-c\b",
+            r"\bsh\s+-c\b",
+            r"\bzsh\s+-c\b",
+            r"\bpython[23]?\s+-c\b",
+            r"\bperl\s+-e\b",
+            r"\bruby\s+-e\b",
+            r"\bnode\s+-e\b",
+            # Pipe to shell
+            r"\|\s*(bash|sh|zsh)\b",
+            # Base64 decode (common evasion)
+            r"\bbase64\s+--?d(ecode)?\b",
+            # Command substitution
+            r"\$\(",
+            r"`",
+            # Variable-based evasion
+            r"\bexport\s+\w+=",
         ]
         self.allow_patterns = allow_patterns or []
         self.restrict_to_workspace = restrict_to_workspace
@@ -44,7 +64,10 @@ class ExecTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Execute a shell command and return its output. Use with caution."
+        return (
+            "Execute a shell command and return its output. Use with caution. "
+            "Command substitution ($(...) and backticks) is blocked — run commands separately instead."
+        )
     
     @property
     def parameters(self) -> dict[str, Any]:
@@ -123,9 +146,25 @@ class ExecTool(Tool):
         except Exception as e:
             return f"Error executing command: {str(e)}"
 
+    @staticmethod
+    def _normalize_command(cmd: str) -> str:
+        """Decode ANSI-C quoting and hex escapes so deny patterns can match evasion attempts."""
+        # Expand $'\xNN' and $'\NNN' ANSI-C style quoting
+        def _expand_ansi_c(m: re.Match) -> str:
+            inner = m.group(1)
+            # Replace \xNN hex escapes
+            inner = re.sub(r"\\x([0-9a-fA-F]{2})", lambda h: chr(int(h.group(1), 16)), inner)
+            # Replace \NNN octal escapes
+            inner = re.sub(r"\\([0-7]{1,3})", lambda o: chr(int(o.group(1), 8)), inner)
+            return inner
+
+        cmd = re.sub(r"\$'([^']*)'", _expand_ansi_c, cmd)
+        return cmd
+
     def _guard_command(self, command: str, cwd: str) -> str | None:
         """Best-effort safety guard for potentially destructive commands."""
         cmd = command.strip()
+        cmd = self._normalize_command(cmd)
         lower = cmd.lower()
 
         for pattern in self.deny_patterns:
