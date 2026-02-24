@@ -44,6 +44,6 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: root
+          username: ubuntu
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script: /opt/nanobot/apply-live.sh
+          script: sudo /opt/nanobot/apply-live.sh
