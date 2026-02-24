@@ -1,7 +1,7 @@
 # Nanobot Security Audit & Architecture Reference
 
 **Date:** 2026-02-23
-**Branch:** `main` (rebased on upstream HKUDS/nanobot + 10 security/infra commits)
+**Branch:** `main` (rebased on upstream HKUDS/nanobot + 14 security/infra commits)
 
 ---
 
@@ -171,37 +171,37 @@ Nanobot reloads with updated skills/MCP/cron
 
 **Fixed in `e6a70d4`**: `_resolve_path()` now blocks non-regular files (device files, named pipes, sockets). Symlinks are resolved before sandbox check, preventing symlink escape.
 
-#### 4. Gateway - No API Authentication
+#### 4. Gateway - No API Authentication — MITIGATED
 **File:** `nanobot/cli/commands.py`
 
-The gateway HTTP server has zero authentication. Protected only by localhost binding (127.0.0.1). If binding is changed to 0.0.0.0 or nginx misconfigured, anyone can send messages.
+The gateway has no HTTP server (port 18790 is declared but nothing listens). Communication is via chat channel SDKs (Telegram, Discord, etc.) which have their own auth. Protected by localhost binding + nginx reverse proxy.
 
-**Fix:** Add optional API key or bearer token authentication at the gateway level.
+**Mitigated:** Architecture prevents direct HTTP access. `gateway.api_key` field added to schema (`ff2cb3f`) for future HTTP API layer.
 
-#### 5. Channels - Default Open Access
+#### 5. ~~Channels - Default Open Access~~ MITIGATED
 **File:** `nanobot/channels/base.py`
 
-When `allow_from` is empty (the default), ALL users on any channel can interact with the bot. A warning is logged once but the bot remains fully operational.
+When `allow_from` is empty, ALL users can interact. Changing the default would break onboarding.
 
-**Fix:** Consider requiring explicit `allow_from` configuration. Or default to deny-all with an explicit `allow_from: ["*"]` for open access.
+**Mitigated in `f1a4c67` + `92d87fc`**: Per-channel warning logged once at runtime. Visible console warning printed at gateway startup for each open channel. Operators see the posture immediately.
 
 ---
 
 ### HIGH Findings
 
-#### 6. SSH Open to 0.0.0.0/0
-**File:** `infra/lib/nanobot-stack.ts` (line 142)
+#### 6. ~~SSH Open to 0.0.0.0/0~~ FIXED
+**File:** `infra/lib/nanobot-stack.ts`
 
-Port 22 accepts connections from any IP. Comment says "restrict cidrs to your office/home IP for hardening" but the default is wide open.
+~~Port 22 defaulted to 0.0.0.0/0.~~
 
-**Fix:** Require CIDR configuration parameter with no default. Or default to a narrow range.
+**Fixed in `4ae1f8f`**: `sshCidrs` is now a required context parameter with no default. CDK deploy fails with a clear error if not provided. Operators must explicitly pass their IP CIDR.
 
-#### 7. Shell Tool - Default restrict_to_workspace=False
+#### 7. Shell Tool - Default restrict_to_workspace=False — MITIGATED
 **File:** `nanobot/config/schema.py`
 
-The shell tool defaults to unrestricted execution. Combined with the deny-list approach (not allowlist), sophisticated command obfuscation could bypass protections.
+Shell tool defaults to unrestricted. Changing the default would break legitimate workflows (package installs, git, system config).
 
-**Fix:** Default `restrict_to_workspace=True`.
+**Mitigated in `92d87fc`**: Visible console warning at gateway startup when `restrict_to_workspace=False`. Operators see the posture immediately and can opt in to sandboxing.
 
 #### 8. Credentials in Plaintext config.json
 **File:** `infra/lib/scripts/user-data.sh`
@@ -217,12 +217,12 @@ After retrieval from AWS Secrets Manager, all credentials are written to `/data/
 
 **Fixed in `e6a70d4`**: `_resolve_path()` already called `.resolve()` (which follows symlinks) before `.relative_to()` (sandbox check). This was correct behavior — symlinks are resolved first, then the resolved path is verified within `allowed_dir`. Added explicit documentation of this security property.
 
-#### 10. MCP Tools - No Process Sandboxing
+#### 10. ~~MCP Tools - No Process Sandboxing~~ PARTIALLY FIXED
 **File:** `nanobot/agent/tools/mcp.py`
 
-MCP servers run with the same privileges as nanobot. Config-specified commands are executed directly without validation. Compromised config = arbitrary code execution.
+MCP servers run with same privileges as nanobot. Compromised config = arbitrary execution.
 
-**Fix:** Implement MCP server allowlist. Run MCP servers in isolated containers or with reduced privileges.
+**Partially fixed in `523a2a8`**: `tools.mcp_allowed_commands` allowlist rejects unlisted commands at connection time. Full container isolation deferred (architecture change).
 
 #### 11. ~~Web Tool - HTTP Auth Credentials Leaked~~ FIXED
 **File:** `nanobot/agent/tools/web.py`
@@ -274,6 +274,10 @@ These commits are on your `main` branch:
 | `f845cd1` Fix gen-env-template.sh | Creates `stack-manifest.json` if missing instead of skipping |
 | `9886b8b` Block SSRF + strip credentials | Private IP blocklist in web tool, strip userinfo from response URLs |
 | `e6a70d4` Filesystem hardening | Block device files/pipes/sockets, document symlink-safe resolve |
+| `ff2cb3f` Config schema additions | `gateway.api_key` (future HTTP auth), `tools.mcp_allowed_commands` |
+| `4ae1f8f` SSH CIDR enforcement | `sshCidrs` context param required — no more 0.0.0.0/0 default |
+| `92d87fc` Startup security warnings | Console warnings for unsandboxed tools and open channels |
+| `523a2a8` MCP command allowlist | Reject unlisted MCP stdio commands at connection time |
 
 On the `live` branch:
 
