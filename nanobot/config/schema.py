@@ -233,6 +233,7 @@ class GatewayConfig(Base):
 
     host: str = "127.0.0.1"
     port: int = 18790
+    api_key: str = ""  # Optional: require Bearer token on HTTP requests when set
 
 
 class WebSearchConfig(Base):
@@ -272,6 +273,7 @@ class ToolsConfig(Base):
     exec: ExecToolConfig = Field(default_factory=ExecToolConfig)
     restrict_to_workspace: bool = False  # If true, restrict all tool access to workspace directory
     mcp_servers: dict[str, MCPServerConfig] = Field(default_factory=dict)
+    mcp_allowed_commands: list[str] = Field(default_factory=list)  # If set, only these commands can run as MCP stdio servers
 
 
 class Config(BaseSettings):
