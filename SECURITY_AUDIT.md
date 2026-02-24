@@ -1,7 +1,7 @@
 # Nanobot Security Audit & Architecture Reference
 
 **Date:** 2026-02-23
-**Branch:** `main` (rebased on upstream HKUDS/nanobot + 8 security/infra commits)
+**Branch:** `main` (rebased on upstream HKUDS/nanobot + 10 security/infra commits)
 
 ---
 
@@ -150,15 +150,12 @@ Nanobot reloads with updated skills/MCP/cron
 
 ### CRITICAL Findings
 
-#### 1. Web Tool - SSRF (No Private IP Blocklist)
+#### 1. ~~Web Tool - SSRF (No Private IP Blocklist)~~ FIXED
 **File:** `nanobot/agent/tools/web.py`
 
-The `web_fetch` tool validates URL scheme (http/https) but does NOT block private IPs. The agent can request:
-- `http://127.0.0.1:6379` (Redis)
-- `http://169.254.169.254/latest/meta-data/` (AWS instance metadata / IAM credentials)
-- `http://10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` ranges
+~~The `web_fetch` tool validates URL scheme (http/https) but does NOT block private IPs.~~
 
-**Fix:** Add IP resolution check before connecting - deny RFC1918, link-local, loopback, and cloud metadata endpoints.
+**Fixed in `9886b8b`**: `_is_private_ip()` resolves hostnames via DNS and blocks private, loopback, link-local, reserved, and multicast IPs before connecting. Also strips `user:pass@` credentials from URLs in responses.
 
 #### 2. Filesystem Tool - No Default Sandbox
 **File:** `nanobot/agent/tools/filesystem.py`
@@ -167,12 +164,12 @@ The `web_fetch` tool validates URL scheme (http/https) but does NOT block privat
 
 **Fix:** Default `allowed_dir` to the workspace directory. Require explicit opt-out for unrestricted access.
 
-#### 3. Filesystem Tool - No File Type Restrictions
+#### 3. ~~Filesystem Tool - No File Type Restrictions~~ FIXED
 **File:** `nanobot/agent/tools/filesystem.py`
 
-No restrictions on file types. Agent can read/write symlinks, device files (`/dev/sda`), named pipes. Symlink following via `Path.resolve()` enables sandbox escape.
+~~No restrictions on file types. Agent can read/write device files, named pipes.~~
 
-**Fix:** Restrict to regular files only. Check `is_file()` and `is_symlink()` before operations.
+**Fixed in `e6a70d4`**: `_resolve_path()` now blocks non-regular files (device files, named pipes, sockets). Symlinks are resolved before sandbox check, preventing symlink escape.
 
 #### 4. Gateway - No API Authentication
 **File:** `nanobot/cli/commands.py`
@@ -213,12 +210,12 @@ After retrieval from AWS Secrets Manager, all credentials are written to `/data/
 
 **Fix:** Keep credentials in environment variables only. Or encrypt config.json at rest.
 
-#### 9. Symlink Escape in Filesystem Tool
+#### 9. ~~Symlink Escape in Filesystem Tool~~ FIXED
 **File:** `nanobot/agent/tools/filesystem.py`
 
-`Path.resolve()` follows symlinks. If a symlink is created inside the workspace pointing outside (`workspace/link -> /etc/shadow`), the agent can escape the sandbox.
+~~`Path.resolve()` follows symlinks, enabling sandbox escape via crafted symlinks.~~
 
-**Fix:** Resolve path, then verify the resolved path is still within `allowed_dir`.
+**Fixed in `e6a70d4`**: `_resolve_path()` already called `.resolve()` (which follows symlinks) before `.relative_to()` (sandbox check). This was correct behavior — symlinks are resolved first, then the resolved path is verified within `allowed_dir`. Added explicit documentation of this security property.
 
 #### 10. MCP Tools - No Process Sandboxing
 **File:** `nanobot/agent/tools/mcp.py`
@@ -227,12 +224,12 @@ MCP servers run with the same privileges as nanobot. Config-specified commands a
 
 **Fix:** Implement MCP server allowlist. Run MCP servers in isolated containers or with reduced privileges.
 
-#### 11. Web Tool - HTTP Auth Credentials Leaked
+#### 11. ~~Web Tool - HTTP Auth Credentials Leaked~~ FIXED
 **File:** `nanobot/agent/tools/web.py`
 
-URLs with embedded credentials (`http://user:pass@host.com`) are fetched and the full URL appears in response metadata.
+~~URLs with embedded credentials (`http://user:pass@host.com`) appear in response metadata.~~
 
-**Fix:** Strip userinfo from URLs before logging/returning.
+**Fixed in `9886b8b`**: `_strip_userinfo()` removes `user:pass@` from URLs before including them in response JSON. Both `url` and `finalUrl` fields are sanitized.
 
 ---
 
@@ -275,6 +272,8 @@ These commits are on your `main` branch:
 | `1d875f3` Harden reconciler skill | Bootstrap call, dirty-check before staging, explicit push error handling |
 | `23dc68f` Reconciler hooks | clawhub, cron, skill-creator now remind agent to reconcile after installs |
 | `f845cd1` Fix gen-env-template.sh | Creates `stack-manifest.json` if missing instead of skipping |
+| `9886b8b` Block SSRF + strip credentials | Private IP blocklist in web tool, strip userinfo from response URLs |
+| `e6a70d4` Filesystem hardening | Block device files/pipes/sockets, document symlink-safe resolve |
 
 On the `live` branch:
 
