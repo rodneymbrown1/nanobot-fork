@@ -1,11 +1,13 @@
 """Web tools: web_search and web_fetch."""
 
 import html
+import ipaddress
 import json
 import os
 import re
+import socket
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 
@@ -30,14 +32,46 @@ def _normalize(text: str) -> str:
     return re.sub(r'\n{3,}', '\n\n', text).strip()
 
 
+def _strip_userinfo(url: str) -> str:
+    """Remove username:password from a URL to prevent credential leakage."""
+    p = urlparse(url)
+    if p.username or p.password:
+        # Rebuild netloc without userinfo
+        netloc = p.hostname or ""
+        if p.port:
+            netloc += f":{p.port}"
+        return urlunparse(p._replace(netloc=netloc))
+    return url
+
+
+def _is_private_ip(hostname: str) -> bool:
+    """Check if a hostname resolves to a private, loopback, or link-local IP."""
+    try:
+        # Resolve hostname to IP addresses
+        infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for family, _, _, _, sockaddr in infos:
+            ip_str = sockaddr[0]
+            addr = ipaddress.ip_address(ip_str)
+            if (addr.is_private or addr.is_loopback or addr.is_link_local
+                    or addr.is_reserved or addr.is_multicast):
+                return True
+    except (socket.gaierror, ValueError):
+        # If we can't resolve, allow the request — httpx will fail on its own
+        return False
+    return False
+
+
 def _validate_url(url: str) -> tuple[bool, str]:
-    """Validate URL: must be http(s) with valid domain."""
+    """Validate URL: must be http(s) with valid domain, no private IPs."""
     try:
         p = urlparse(url)
         if p.scheme not in ('http', 'https'):
             return False, f"Only http/https allowed, got '{p.scheme or 'none'}'"
         if not p.netloc:
             return False, "Missing domain"
+        hostname = p.hostname or ""
+        if _is_private_ip(hostname):
+            return False, f"Blocked: '{hostname}' resolves to a private/internal IP"
         return True, ""
     except Exception as e:
         return False, str(e)
@@ -113,10 +147,13 @@ class WebFetchTool(Tool):
 
         max_chars = maxChars or self.max_chars
 
+        # Strip credentials from URL before any validation or logging
+        safe_url = _strip_userinfo(url)
+
         # Validate URL before fetching
         is_valid, error_msg = _validate_url(url)
         if not is_valid:
-            return json.dumps({"error": f"URL validation failed: {error_msg}", "url": url}, ensure_ascii=False)
+            return json.dumps({"error": f"URL validation failed: {error_msg}", "url": safe_url}, ensure_ascii=False)
 
         try:
             async with httpx.AsyncClient(
@@ -126,9 +163,9 @@ class WebFetchTool(Tool):
             ) as client:
                 r = await client.get(url, headers={"User-Agent": USER_AGENT})
                 r.raise_for_status()
-            
+
             ctype = r.headers.get("content-type", "")
-            
+
             # JSON
             if "application/json" in ctype:
                 text, extractor = json.dumps(r.json(), indent=2, ensure_ascii=False), "json"
@@ -140,15 +177,15 @@ class WebFetchTool(Tool):
                 extractor = "readability"
             else:
                 text, extractor = r.text, "raw"
-            
+
             truncated = len(text) > max_chars
             if truncated:
                 text = text[:max_chars]
-            
-            return json.dumps({"url": url, "finalUrl": str(r.url), "status": r.status_code,
+
+            return json.dumps({"url": safe_url, "finalUrl": _strip_userinfo(str(r.url)), "status": r.status_code,
                               "extractor": extractor, "truncated": truncated, "length": len(text), "text": text}, ensure_ascii=False)
         except Exception as e:
-            return json.dumps({"error": str(e), "url": url}, ensure_ascii=False)
+            return json.dumps({"error": str(e), "url": safe_url}, ensure_ascii=False)
     
     def _to_markdown(self, html: str) -> str:
         """Convert HTML to markdown."""
