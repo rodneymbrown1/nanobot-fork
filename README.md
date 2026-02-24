@@ -112,12 +112,11 @@ ssh root@<INSTANCE_IP> 'certbot --nginx -d yourdomain.com'
 
 ### GitHub Secrets
 
-The deploy workflow (`.github/workflows/deploy-live.yml`) requires these repository secrets:
+The deploy workflow uses **OIDC** for AWS authentication (no static keys). It requires these repository secrets:
 
 | Secret | Description |
 |--------|-------------|
-| `AWS_ACCESS_KEY_ID` | IAM access key for ECR push |
-| `AWS_SECRET_ACCESS_KEY` | IAM secret key for ECR push |
+| `AWS_ROLE_ARN` | IAM role ARN to assume via OIDC (e.g. `arn:aws:iam::123456789012:role/GitHubActionsNanobot`) |
 | `AWS_REGION` | AWS region (e.g. `us-east-1`) |
 | `LIGHTSAIL_HOST` | Instance public IP or hostname |
 | `LIGHTSAIL_SSH_KEY` | SSH private key for root access |
