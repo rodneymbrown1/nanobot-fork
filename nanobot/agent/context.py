@@ -80,9 +80,19 @@ Skills with available="false" need dependencies installed first - you can try in
         system = platform.system()
         runtime = f"{'macOS' if system == 'Darwin' else system} {platform.machine()}, Python {platform.python_version()}"
         
-        return f"""# nanobot 🐈
+        # Load soul name from SOUL.md if available, fallback to default
+        soul_path = self.workspace / "SOUL.md"
+        if not soul_path.exists():
+            # Check template directory as fallback
+            soul_path = Path(__file__).parent.parent / "templates" / "SOUL.md"
 
-You are nanobot, a helpful AI assistant. 
+        soul_name = "nanobot"
+        if soul_path.exists():
+            first_line = soul_path.read_text(encoding="utf-8").split("\n")[0]
+            if "Tim" in first_line:
+                soul_name = "Tim"
+
+        return f"""# {soul_name}
 
 ## Current Time
 {now} ({tz})

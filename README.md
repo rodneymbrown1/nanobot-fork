@@ -1,208 +1,147 @@
-# Nanobot
+# nanobot
 
-A lightweight personal AI assistant framework. Connects to multiple chat channels (Telegram, Slack, Discord, WhatsApp, etc.) and exposes an HTTP gateway for tool-augmented conversations powered by LLMs.
+A lightweight personal AI assistant that runs 24/7 on your own infrastructure. Connects to Telegram, Email (Outlook), and more via a unified gateway.
+
+## Prerequisites
+
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- Node.js 18+ (for WhatsApp bridge and CDK deploy)
+- Docker (for cloud deploy)
+- AWS account with credentials configured (`aws configure`)
 
 ## Local Development
 
-### Prerequisites
+```bash
+# Install dependencies
+uv sync
 
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) package manager
+# First-time setup — creates config and workspace
+uv run nanobot onboard
 
-### Setup
+# Edit config with your API key
+# Get one at https://openrouter.ai/keys
+vim ~/.nanobot/config.json
+
+# Single message
+uv run nanobot agent -m "Hello!"
+
+# Interactive chat
+uv run nanobot agent
+
+# Start the gateway (all channels)
+uv run nanobot gateway
+```
+
+## Deploy to AWS
+
+A single command provisions infrastructure (Lightsail + ECR), builds and pushes the Docker image, uploads secrets, and starts the container.
+
+### Quick Start
 
 ```bash
-uv sync --dev
-uv run nanobot onboard       # interactive config wizard
-uv run nanobot gateway        # start the HTTP gateway
+uv run nanobot deploy
 ```
 
-### Testing
+This walks you through 7 phases interactively:
+
+1. **Prerequisites check** — verifies node, docker, AWS creds
+2. **Collect secrets** — gateway key, email, Telegram, Brave, MCP servers (Jira, Notion, etc.)
+3. **CDK deploy** — provisions Lightsail instance, ECR repo, Secrets Manager, static IP
+4. **Push Docker image** — builds `linux/amd64` and pushes to ECR
+5. **Upload secrets** — writes config JSON to Secrets Manager
+6. **Start container** — waits for bootstrap, restarts service, checks health
+7. **GitHub secrets** — prints (or auto-sets) values for CI/CD
+
+### Partial Runs
 
 ```bash
-uv run pytest tests/ -v
-uv run ruff check .
-uv run ruff format --check .
+# Re-deploy just secrets (e.g. after changing a token)
+nanobot deploy --secrets-only
+
+# Rebuild and push image only
+nanobot deploy --image-only
+
+# Restart the container on the instance
+nanobot deploy --restart-only
+
+# Full deploy but skip CDK (infra already exists)
+nanobot deploy --skip-cdk
+
+# Full deploy but skip image build
+nanobot deploy --skip-image
+
+# Upload SOUL.md, USER.md, AGENTS.md to the instance
+nanobot deploy --with-workspace
+
+# Deploy to a different region
+nanobot deploy --region us-west-2
 ```
 
-CI runs lint and test automatically on pushes to `main` and PRs to `main`/`live`.
+### What Gets Created
 
----
+| Resource | Details |
+|----------|---------|
+| Lightsail instance | Ubuntu 22.04, `small_3_0` (2 vCPU, 2GB RAM) |
+| Lightsail disk | 20GB persistent at `/data` |
+| Static IP | Stable address for DNS |
+| ECR repository | `nanobot` — stores Docker images |
+| Secrets Manager | `nanobot/config` — full config JSON |
+| IAM user | `nanobot-instance` — ECR pull + secrets read |
 
-## Deployment (AWS Lightsail)
+### Deploy State
 
-Nanobot deploys to a single Lightsail instance via AWS CDK. The stack provisions:
+State is persisted to `~/.nanobot/deploy-state.json` between runs. Re-running `nanobot deploy` detects the existing stack and offers to update or skip.
 
-- **Lightsail instance** with Docker, nginx, and systemd
-- **ECR repository** for the Docker image
-- **Secrets Manager secret** for all API keys and credentials
-- **Persistent disk** for sessions, memory, and workspace data
+### GitHub Actions (CI/CD)
 
-### Architecture
+After deploy, set these secrets in your GitHub repo (Settings > Secrets > Actions):
 
-```
-GitHub (live branch)
-  └─ PR merge triggers GitHub Actions
-       ├─ Build Docker image → push to ECR
-       └─ SSH → apply-live.sh
-            ├─ Pull latest live branch
-            ├─ Refresh secrets from Secrets Manager → .env.nanobot
-            ├─ Patch MCP servers from stack manifest
-            └─ Restart container + health check
+| Secret | Value |
+|--------|-------|
+| `AWS_ROLE_ARN` | OIDC role ARN (see AWS docs) |
+| `AWS_REGION` | `us-east-1` (or your region) |
+| `LIGHTSAIL_HOST` | Instance public IP |
+| `LIGHTSAIL_SSH_KEY` | Lightsail default SSH private key |
 
-Lightsail instance
-  ├─ nginx (TLS termination) → localhost:18790
-  └─ Docker: nanobot-gateway
-       ├─ env_file: .env.nanobot (NANOBOT_* vars)
-       └─ volumes: sessions, memory, workspace on /data/.nanobot
-```
-
-Secrets never touch disk as plaintext config. Secrets Manager JSON is converted to `NANOBOT_*` environment variables written to `/opt/nanobot/.env.nanobot` (mode 0600), which Docker reads via `env_file`.
-
-### Initial Setup
-
-#### 1. Deploy the CDK stack
+## Other Commands
 
 ```bash
-cd infra
-npm install
-npx cdk deploy --context sshCidrs='["YOUR_IP/32"]'
+# Check status
+nanobot status
+
+# Channel status
+nanobot channels status
+
+# WhatsApp QR login
+nanobot channels login
+
+# Manage scheduled jobs
+nanobot cron list
+nanobot cron add --name "daily-brief" --cron "0 9 * * *" --tz "America/New_York" -m "Give me a morning briefing"
+nanobot cron remove <job-id>
+
+# OAuth login (OpenAI Codex, GitHub Copilot)
+nanobot provider login openai-codex
 ```
 
-This provisions the Lightsail instance, ECR repo, IAM user, and Secrets Manager secret. The instance bootstraps itself via user-data (installs Docker, nginx, systemd service, etc.).
+## Project Structure
 
-#### 2. Populate secrets
-
-```bash
-cd infra
-./scripts/put-secret.sh
 ```
-
-Interactive prompt for API keys (Anthropic, OpenAI, Telegram token, Brave Search, etc.). These are stored in Secrets Manager and converted to env vars at container start.
-
-To add secrets later (e.g. for new MCP servers), update the secret and the next `apply-live.sh` run will pick them up:
-
-```bash
-# Read current secret, edit, and re-upload
-aws secretsmanager get-secret-value --secret-id <ARN> --query SecretString --output text | \
-  jq '.tools.web.search.apiKey = "new-key"' | \
-  aws secretsmanager put-secret-value --secret-id <ARN> --secret-string file:///dev/stdin
+nanobot/
+  cli/          # CLI commands (typer)
+  agent/        # Agent loop and context
+  channels/     # Telegram, Email, WhatsApp, Slack, Discord
+  bus/          # Message bus (inbound/outbound)
+  config/       # Config schema and loader
+  cron/         # Scheduled jobs
+  heartbeat/    # Periodic self-check
+  providers/    # LLM providers (LiteLLM, OpenAI Codex, custom)
+  templates/    # SOUL.md, USER.md, AGENTS.md defaults
+  tools/        # Built-in tools (exec, web, files, memory)
+infra/          # CDK stack + deploy scripts
+bridge/         # WhatsApp bridge (Node.js)
 ```
-
-#### 3. Push the Docker image
-
-```bash
-cd infra
-./scripts/push-image.sh
-```
-
-Builds `linux/amd64`, tags as `latest`, and pushes to ECR. After the first deploy, this step is automated by the GitHub Actions workflow on PR merges to `live`.
-
-#### 4. Start nanobot
-
-```bash
-ssh root@<INSTANCE_IP> 'systemctl restart nanobot'
-```
-
-#### 5. Enable HTTPS (optional)
-
-```bash
-ssh root@<INSTANCE_IP> 'certbot --nginx -d yourdomain.com'
-```
-
-### GitHub Secrets
-
-The deploy workflow uses **OIDC** for AWS authentication (no static keys). It requires these repository secrets:
-
-| Secret | Description |
-|--------|-------------|
-| `AWS_ROLE_ARN` | IAM role ARN to assume via OIDC (e.g. `arn:aws:iam::123456789012:role/GitHubActionsNanobot`) |
-| `AWS_REGION` | AWS region (e.g. `us-east-1`) |
-| `LIGHTSAIL_HOST` | Instance public IP or hostname |
-| `LIGHTSAIL_SSH_KEY` | SSH private key for root access |
-
-### Deploy Workflow
-
-Deployments are triggered by **merging a PR into the `live` branch** (not by direct pushes). The workflow:
-
-1. Builds the Docker image (`linux/amd64`)
-2. Tags with commit SHA + `latest`
-3. Pushes to ECR
-4. SSHs into the instance and runs `apply-live.sh`
-
-`apply-live.sh` then:
-1. Pulls the latest `live` branch into the workspace
-2. Re-reads secrets from Secrets Manager (picks up any new API keys)
-3. Merges MCP server declarations from `stack-manifest.json`
-4. Restarts the container and waits for the health check (15 retries, 2s interval)
-
-### Adding MCP Servers
-
-MCP servers are declared in `stack-manifest.json` on the `live` branch. Their secrets go in Secrets Manager.
-
-1. Add the server's API key to the Secrets Manager secret:
-   ```json
-   {
-     "tools": {
-       "mcp_servers": {
-         "my_server": {
-           "env": { "API_KEY": "secret-value" }
-         }
-       }
-     }
-   }
-   ```
-
-2. Add the server declaration to `stack-manifest.json`:
-   ```json
-   {
-     "mcp_servers": [
-       {
-         "name": "my_server",
-         "command": "npx",
-         "args": ["-y", "@my/mcp-server"]
-       }
-     ]
-   }
-   ```
-
-3. Merge a PR to `live` -- the deploy workflow handles the rest.
-
-### Manual Operations
-
-```bash
-# Check container status
-ssh root@<IP> 'docker ps'
-ssh root@<IP> 'docker inspect nanobot-gateway --format="{{.State.Health.Status}}"'
-
-# View logs
-ssh root@<IP> 'docker logs nanobot-gateway --tail 50'
-ssh root@<IP> 'cat /var/log/nanobot-start.log'
-ssh root@<IP> 'cat /var/log/nanobot-apply.log'
-
-# Force redeploy (without PR)
-ssh root@<IP> '/opt/nanobot/apply-live.sh'
-
-# Verify no plaintext config on disk
-ssh root@<IP> 'ls -la /data/.nanobot/config.json'  # should not exist
-ssh root@<IP> 'docker exec nanobot-gateway env | grep NANOBOT'  # env vars loaded
-```
-
-## Configuration
-
-Nanobot reads configuration from (in priority order):
-
-1. **Config file** at `~/.nanobot/config.json` (or `NANOBOT_CONFIG_PATH` env var)
-2. **Environment variables** prefixed with `NANOBOT_`, using `__` as the nested delimiter
-
-Examples:
-```bash
-export NANOBOT_GATEWAY__PORT=9999
-export NANOBOT_PROVIDERS__ANTHROPIC__API_KEY=sk-ant-...
-export NANOBOT_CHANNELS__TELEGRAM__ENABLED=true
-```
-
-In production, only env vars are used (no config file on disk).
 
 ## License
 
