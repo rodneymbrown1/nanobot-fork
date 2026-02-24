@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "skills": [],
+  "mcp_servers": [
+    {
+      "name": "jira",
+      "command": "npx",
+      "args": ["-y", "@aashari/mcp-server-atlassian-jira"],
+      "env_keys": ["ATLASSIAN_SITE_NAME", "ATLASSIAN_USER_EMAIL", "ATLASSIAN_API_TOKEN"],
+      "installed_at": "2026-02-24T00:00:00Z"
+    },
+    {
+      "name": "notion",
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env_keys": ["NOTION_TOKEN"],
+      "installed_at": "2026-02-24T00:00:00Z"
+    },
+    {
+      "name": "paper_search",
+      "command": "uvx",
+      "args": ["paper-search-mcp"],
+      "env_keys": ["SEMANTIC_SCHOLAR_API_KEY"],
+      "installed_at": "2026-02-24T00:00:00Z"
+    },
+    {
+      "name": "twitter",
+      "command": "npx",
+      "args": ["-y", "agent-twitter-client-mcp"],
+      "env_keys": ["TWITTER_COOKIES"],
+      "installed_at": "2026-02-24T00:00:00Z"
+    }
+  ],
+  "cron_jobs": [],
+  "env_shape": {
+    "NANOBOT_PROVIDERS__OPENAI_CODEX__API_KEY": "<OAUTH>",
+    "NANOBOT_CHANNELS__EMAIL__IMAP_HOST": "<VALUE>",
+    "NANOBOT_CHANNELS__EMAIL__IMAP_USERNAME": "<VALUE>",
+    "NANOBOT_CHANNELS__EMAIL__IMAP_PASSWORD": "<REQUIRED_SECRET>",
+    "NANOBOT_CHANNELS__EMAIL__SMTP_HOST": "<VALUE>",
+    "NANOBOT_CHANNELS__EMAIL__SMTP_USERNAME": "<VALUE>",
+    "NANOBOT_CHANNELS__EMAIL__SMTP_PASSWORD": "<REQUIRED_SECRET>",
+    "NANOBOT_TOOLS__MCP_SERVERS": "<VALUE>",
+    "NANOBOT_GATEWAY__API_KEY": "<REQUIRED_SECRET>"
+  }
+}

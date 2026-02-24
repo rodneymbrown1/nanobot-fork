@@ -115,7 +115,7 @@ class AgentDefaults(Base):
     """Default agent configuration."""
 
     workspace: str = "~/.nanobot/workspace"
-    model: str = "anthropic/claude-opus-4-5"
+    model: str = "openai-codex/gpt-5.1-codex"
     max_tokens: int = 8192
     temperature: float = 0.1
     max_tool_iterations: int = 40
@@ -196,7 +196,9 @@ class ToolsConfig(Base):
     exec: ExecToolConfig = Field(default_factory=ExecToolConfig)
     restrict_to_workspace: bool = True  # Restrict all tool access to workspace directory
     mcp_servers: dict[str, MCPServerConfig] = Field(default_factory=dict)
-    mcp_allowed_commands: list[str] = Field(default_factory=list)  # If set, only these commands can run as MCP stdio servers
+    mcp_allowed_commands: list[str] = Field(
+        default_factory=lambda: ["npx", "uvx"],
+    )  # Only these commands can run as MCP stdio servers
 
 
 class Config(BaseSettings):
