@@ -205,7 +205,12 @@ def _inject_env_into_config(data: dict) -> dict:
         leaf = keys[-1]
         # Only inject if the config value is absent or empty
         if not node.get(leaf):
-            node[leaf] = _coerce_value(value)
+            coerced = _coerce_value(value)
+            # Fields that are always lists (e.g. allowFrom) — wrap scalars
+            if leaf.endswith("From") or leaf.endswith("Commands"):
+                if not isinstance(coerced, list):
+                    coerced = [str(coerced)]
+            node[leaf] = coerced
 
     return data
 
