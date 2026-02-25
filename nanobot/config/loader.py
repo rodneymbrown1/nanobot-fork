@@ -23,15 +23,26 @@ _ENV_MAP: dict[str, str] = {
     "AGENT_INSTANCE":               "agents.instance",
 
     # --- LLM providers ---
-    "ANTHROPIC_API_KEY":    "providers.anthropic.apiKey",
-    "OPENAI_API_KEY":       "providers.openai.apiKey",
-    "OPENROUTER_API_KEY":   "providers.openrouter.apiKey",
-    "DEEPSEEK_API_KEY":     "providers.deepseek.apiKey",
-    "GEMINI_API_KEY":       "providers.gemini.apiKey",
-    "GROQ_API_KEY":         "providers.groq.apiKey",
-    "HOSTED_VLLM_API_KEY":  "providers.vllm.apiKey",
-    "CUSTOM_API_KEY":       "providers.custom.apiKey",
-    "CUSTOM_API_BASE":      "providers.custom.apiBase",
+    "ANTHROPIC_API_KEY":        "providers.anthropic.apiKey",
+    "ANTHROPIC_API_BASE":       "providers.anthropic.apiBase",
+    "OPENAI_API_KEY":           "providers.openai.apiKey",
+    "OPENAI_API_BASE":          "providers.openai.apiBase",
+    "OPENROUTER_API_KEY":       "providers.openrouter.apiKey",
+    "OPENROUTER_API_BASE":      "providers.openrouter.apiBase",
+    "DEEPSEEK_API_KEY":         "providers.deepseek.apiKey",
+    "DEEPSEEK_API_BASE":        "providers.deepseek.apiBase",
+    "GEMINI_API_KEY":           "providers.gemini.apiKey",
+    "GEMINI_API_BASE":          "providers.gemini.apiBase",
+    "GROQ_API_KEY":             "providers.groq.apiKey",
+    "GROQ_API_BASE":            "providers.groq.apiBase",
+    "HOSTED_VLLM_API_KEY":      "providers.vllm.apiKey",
+    "HOSTED_VLLM_API_BASE":     "providers.vllm.apiBase",
+    "OPENAI_CODEX_API_KEY":     "providers.openaiCodex.apiKey",
+    "OPENAI_CODEX_API_BASE":    "providers.openaiCodex.apiBase",
+    "GITHUB_COPILOT_API_KEY":   "providers.githubCopilot.apiKey",
+    "GITHUB_COPILOT_API_BASE":  "providers.githubCopilot.apiBase",
+    "CUSTOM_API_KEY":           "providers.custom.apiKey",
+    "CUSTOM_API_BASE":          "providers.custom.apiBase",
 
     # --- Agent defaults ---
     "NANOBOT_MODEL":                "agents.defaults.model",
@@ -105,6 +116,7 @@ _ENV_MAP: dict[str, str] = {
     "BRAVE_MAX_RESULTS":            "tools.web.search.maxResults",
     "EXEC_TIMEOUT":                 "tools.exec.timeout",
     "RESTRICT_TO_WORKSPACE":        "tools.restrictToWorkspace",
+    "MCP_ALLOWED_COMMANDS":         "tools.mcpAllowedCommands",
 
     # --- Integrations: Notion ---
     "NOTION_API_KEY":               "integrations.notion.apiKey",
