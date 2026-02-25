@@ -126,6 +126,8 @@ class AgentsConfig(Base):
     """Agent configuration."""
 
     defaults: AgentDefaults = Field(default_factory=AgentDefaults)
+    bucket: str = ""       # S3 bucket for identity files
+    instance: str = ""     # Instance prefix (folder) in the bucket
 
 
 class ProviderConfig(Base):

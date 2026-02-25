@@ -4,26 +4,31 @@ import base64
 import mimetypes
 import platform
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from nanobot.agent.memory import MemoryStore
 from nanobot.agent.skills import SkillsLoader
+
+if TYPE_CHECKING:
+    from nanobot.config.schema import AgentsConfig
 
 
 class ContextBuilder:
     """
     Builds the context (system prompt + messages) for the agent.
-    
+
     Assembles bootstrap files, memory, skills, and conversation history
     into a coherent prompt for the LLM.
     """
-    
+
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md"]
-    
-    def __init__(self, workspace: Path):
+
+    def __init__(self, workspace: Path, agents_config: AgentsConfig | None = None):
         self.workspace = workspace
+        self.agents_config = agents_config
         self.memory = MemoryStore(workspace)
         self.skills = SkillsLoader(workspace)
+        self._identity_synced = False
     
     def build_system_prompt(self, skill_names: list[str] | None = None) -> str:
         """
@@ -89,8 +94,9 @@ Skills with available="false" need dependencies installed first - you can try in
         soul_name = "nanobot"
         if soul_path.exists():
             first_line = soul_path.read_text(encoding="utf-8").split("\n")[0]
-            if "Tim" in first_line:
-                soul_name = "Tim"
+            # Extract name from "# soul.md — <Name>" pattern
+            if "—" in first_line:
+                soul_name = first_line.split("—", 1)[1].strip().split("(")[0].strip() or "nanobot"
 
         return f"""# {soul_name}
 
@@ -120,15 +126,37 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
 - Recall past events: grep {workspace_path}/memory/HISTORY.md"""
     
     def _load_bootstrap_files(self) -> str:
-        """Load all bootstrap files from workspace."""
+        """Load all bootstrap files from workspace.
+
+        If an S3 bucket is configured and a bootstrap file is missing locally,
+        attempt a one-time sync from S3.
+        """
+        # Lazy one-time identity sync from S3
+        if not self._identity_synced and self.agents_config:
+            bucket = self.agents_config.bucket
+            instance = self.agents_config.instance
+            if bucket and instance:
+                from nanobot.agent.identity import IDENTITY_FILES
+                missing = [f for f in IDENTITY_FILES if not (self.workspace / f).exists()]
+                if missing:
+                    try:
+                        from nanobot.agent.identity import sync_identity
+                        sync_identity(self.workspace, bucket, instance)
+                    except Exception as exc:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "S3 identity sync failed: %s", exc,
+                        )
+            self._identity_synced = True
+
         parts = []
-        
+
         for filename in self.BOOTSTRAP_FILES:
             file_path = self.workspace / filename
             if file_path.exists():
                 content = file_path.read_text(encoding="utf-8")
                 parts.append(f"## {filename}\n\n{content}")
-        
+
         return "\n\n".join(parts) if parts else ""
     
     def build_messages(

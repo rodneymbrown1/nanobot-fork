@@ -579,12 +579,33 @@ class DeployFlow:
             console.print("[red]Public IP not found.[/red]")
             return
 
-        templates_dir = Path(__file__).resolve().parent.parent / "templates"
+        # If S3 bucket is configured, pull identity files from S3 on the instance
+        agent_bucket = os.environ.get("AGENT_BUCKET", "")
+        agent_instance = os.environ.get("AGENT_INSTANCE", "")
+
         remote_dir = "/data/.nanobot/workspace"
         ssh_base = ["ssh", "-o", "StrictHostKeyChecking=no", f"ubuntu@{ip}"]
 
         # Ensure remote dir exists
         _run([*ssh_base, f"sudo mkdir -p {remote_dir}"], check=False)
+
+        if agent_bucket and agent_instance:
+            console.print(f"Syncing identity from [cyan]s3://{agent_bucket}/{agent_instance}/[/cyan]")
+            s3_cmd = f'aws s3 sync "s3://{agent_bucket}/{agent_instance}/" {remote_dir}/ --include "*.md"'
+            result = _run([*ssh_base, s3_cmd], check=False)
+            if result.returncode == 0:
+                console.print("[green]Identity files synced from S3.[/green]")
+            else:
+                console.print("[yellow]S3 sync failed — falling back to local scp.[/yellow]")
+                self._phase6_scp_fallback(ip, ssh_base, remote_dir)
+        else:
+            self._phase6_scp_fallback(ip, ssh_base, remote_dir)
+
+        console.print()
+
+    def _phase6_scp_fallback(self, ip: str, ssh_base: list[str], remote_dir: str) -> None:
+        """Upload workspace files via scp (fallback when S3 is not configured)."""
+        templates_dir = Path(__file__).resolve().parent.parent / "templates"
 
         for filename in ("SOUL.md", "USER.md", "AGENTS.md"):
             local = templates_dir / filename
@@ -600,8 +621,6 @@ class DeployFlow:
             _run(["scp", "-o", "StrictHostKeyChecking=no", str(local), f"ubuntu@{ip}:/tmp/{filename}"])
             _run([*ssh_base, f"sudo mv /tmp/{filename} {remote_dir}/{filename} && sudo chown root:root {remote_dir}/{filename}"])
             console.print(f"  [green]Uploaded {filename}[/green]")
-
-        console.print()
 
     # ------------------------------------------------------------------
     # Phase 7: Print GitHub Secrets

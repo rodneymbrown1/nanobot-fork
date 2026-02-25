@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lightsail from 'aws-cdk-lib/aws-lightsail';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -111,6 +112,29 @@ export class NanobotStack extends cdk.Stack {
       }),
     );
 
+    // ── Agent identity S3 bucket (optional) ───────────────────────────────
+    // Pass via: cdk deploy --context agentBucket=devpro-agents
+    const agentBucket = this.node.tryGetContext('agentBucket') ?? '';
+    const agentInstance = this.node.tryGetContext('agentInstance') ?? '';
+
+    if (agentBucket) {
+      const bucket = new s3.Bucket(this, 'AgentIdentityBucket', {
+        bucketName: agentBucket,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+        versioned: true,
+        blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+        encryption: s3.BucketEncryption.S3_MANAGED,
+      });
+
+      // Grant the instance user read/write to the bucket
+      bucket.grantReadWrite(instanceUser);
+
+      new cdk.CfnOutput(this, 'AgentBucketName', {
+        value: agentBucket,
+        description: 'S3 bucket for agent identity files',
+      });
+    }
+
     // Access key — injected into the instance via CloudFormation user data
     const accessKey = new iam.CfnAccessKey(this, 'NanobotAccessKey', {
       userName: instanceUser.userName,
@@ -140,7 +164,9 @@ export class NanobotStack extends cdk.Stack {
       .replace(/\$\{AWSSecretKey\}/g, accessKey.attrSecretAccessKey)
       .replace(/\$\{SecretArn\}/g, configSecret.secretArn)
       .replace(/\$\{AWS::AccountId\}/g, cdk.Aws.ACCOUNT_ID)
-      .replace(/\$\{AWS::Region\}/g, cdk.Aws.REGION);
+      .replace(/\$\{AWS::Region\}/g, cdk.Aws.REGION)
+      .replace(/\$\{AgentBucket\}/g, agentBucket)
+      .replace(/\$\{AgentInstance\}/g, agentInstance);
 
     // ── 6. Lightsail instance ─────────────────────────────────────────────────
     const instance = new lightsail.CfnInstance(this, 'NanobotInstance', {

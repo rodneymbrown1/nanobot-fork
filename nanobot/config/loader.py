@@ -18,6 +18,10 @@ _ENV_MAP: dict[str, str] = {
     "AGENT_GMAIL_01":               "agentIdentity.email",
     "AGENT_GMAIL_01_APP_PASSWORD":  "agentIdentity.emailAppPassword",
 
+    # --- Agent identity storage (S3) ---
+    "AGENT_BUCKET":                 "agents.bucket",
+    "AGENT_INSTANCE":               "agents.instance",
+
     # --- LLM providers ---
     "ANTHROPIC_API_KEY":    "providers.anthropic.apiKey",
     "OPENAI_API_KEY":       "providers.openai.apiKey",

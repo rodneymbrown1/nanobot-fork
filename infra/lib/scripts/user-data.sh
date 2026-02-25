@@ -83,6 +83,16 @@ mkdir -p /data/.nanobot /data/.nanobot/sessions /data/.nanobot/memory /data/.nan
 ln -sfn /data/.nanobot /root/.nanobot
 chmod 700 /data/.nanobot
 
+# Agent identity (optional) — pull bootstrap files from S3
+AGENT_BUCKET="${AgentBucket}"
+AGENT_INSTANCE="${AgentInstance}"
+
+if [ -n "$AGENT_BUCKET" ] && [ -n "$AGENT_INSTANCE" ]; then
+  echo "  Syncing agent identity from s3://$AGENT_BUCKET/$AGENT_INSTANCE/ ..."
+  aws s3 sync "s3://${AGENT_BUCKET}/${AGENT_INSTANCE}/" /data/.nanobot/workspace/ --include "*.md" || true
+  echo "  Agent identity sync complete."
+fi
+
 echo "--- [6/10] docker-compose.yml ---"
 mkdir -p /opt/nanobot
 

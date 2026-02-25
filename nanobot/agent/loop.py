@@ -27,7 +27,7 @@ from nanobot.providers.base import LLMProvider
 from nanobot.session.manager import Session, SessionManager
 
 if TYPE_CHECKING:
-    from nanobot.config.schema import ChannelsConfig, ExecToolConfig, IntegrationsConfig
+    from nanobot.config.schema import AgentsConfig, ChannelsConfig, ExecToolConfig, IntegrationsConfig
     from nanobot.cron.service import CronService
 
 
@@ -62,10 +62,12 @@ class AgentLoop:
         mcp_allowed_commands: list[str] | None = None,
         channels_config: ChannelsConfig | None = None,
         integrations_config: IntegrationsConfig | None = None,
+        agents_config: AgentsConfig | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig
         self.bus = bus
         self.channels_config = channels_config
+        self.agents_config = agents_config
         self.provider = provider
         self.workspace = workspace
         self.model = model or provider.get_default_model()
@@ -78,7 +80,7 @@ class AgentLoop:
         self.cron_service = cron_service
         self.restrict_to_workspace = restrict_to_workspace
 
-        self.context = ContextBuilder(workspace)
+        self.context = ContextBuilder(workspace, agents_config=agents_config)
         self.sessions = session_manager or SessionManager(workspace)
         self.tools = ToolRegistry()
         self.subagents = SubagentManager(

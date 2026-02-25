@@ -29,6 +29,9 @@ services:
     environment:
       # Bind to all interfaces inside the container so port mapping works
       - NANOBOT_GATEWAY_HOST=0.0.0.0
+      # Agent identity storage (optional — for S3-backed identity files)
+      - AGENT_BUCKET=${AGENT_BUCKET:-}
+      - AGENT_INSTANCE=${AGENT_INSTANCE:-}
     deploy:
       resources:
         limits:

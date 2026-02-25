@@ -351,8 +351,9 @@ def gateway(
         mcp_allowed_commands=config.tools.mcp_allowed_commands or None,
         channels_config=config.channels,
         integrations_config=config.integrations,
+        agents_config=config.agents,
     )
-    
+
     # Set cron callback (needs agent)
     async def on_cron_job(job: CronJob) -> str | None:
         """Execute a cron job through the agent."""
@@ -521,6 +522,7 @@ def agent(
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
         integrations_config=config.integrations,
+        agents_config=config.agents,
     )
 
     # Show spinner when logs are off (no output to miss); skip when logs are on
@@ -643,6 +645,121 @@ def agent(
                 await agent_loop.close_mcp()
 
         asyncio.run(run_interactive())
+
+
+# ============================================================================
+# Identity Commands
+# ============================================================================
+
+
+identity_app = typer.Typer(help="Manage agent identity files (SOUL.md, USER.md, AGENTS.md) in S3")
+app.add_typer(identity_app, name="identity")
+
+
+@identity_app.command("pull")
+def identity_pull():
+    """Download identity files from S3 → workspace."""
+    from nanobot.config.loader import load_config
+    from nanobot.agent.identity import sync_identity, IDENTITY_FILES
+
+    config = load_config()
+    bucket = config.agents.bucket
+    instance = config.agents.instance
+
+    if not bucket or not instance:
+        console.print("[red]AGENT_BUCKET and AGENT_INSTANCE must be set in .env or config.[/red]")
+        raise typer.Exit(1)
+
+    workspace = config.workspace_path
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    # Force download by temporarily removing local files check — sync_identity
+    # skips files that already exist, so we download all from S3.
+    import boto3
+    client = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+
+    downloaded = []
+    for filename in IDENTITY_FILES:
+        key = f"{instance}/{filename}"
+        dest = workspace / filename
+        try:
+            client.download_file(bucket, key, str(dest))
+            downloaded.append(filename)
+            console.print(f"  [green]✓[/green] {filename}")
+        except client.exceptions.ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchKey"):
+                console.print(f"  [yellow]⊘[/yellow] {filename} (not in S3)")
+            else:
+                console.print(f"  [red]✗[/red] {filename}: {exc}")
+        except Exception as exc:
+            console.print(f"  [red]✗[/red] {filename}: {exc}")
+
+    if downloaded:
+        console.print(f"\n[green]Pulled {len(downloaded)} file(s) from s3://{bucket}/{instance}/[/green]")
+    else:
+        console.print("\n[yellow]No files downloaded.[/yellow]")
+
+
+@identity_app.command("push")
+def identity_push():
+    """Upload identity files from workspace → S3."""
+    from nanobot.config.loader import load_config
+    from nanobot.agent.identity import push_identity
+
+    config = load_config()
+    bucket = config.agents.bucket
+    instance = config.agents.instance
+
+    if not bucket or not instance:
+        console.print("[red]AGENT_BUCKET and AGENT_INSTANCE must be set in .env or config.[/red]")
+        raise typer.Exit(1)
+
+    workspace = config.workspace_path
+    region = os.environ.get("AWS_REGION", "us-east-1")
+
+    uploaded = push_identity(workspace, bucket, instance, region)
+    for f in uploaded:
+        console.print(f"  [green]✓[/green] {f}")
+
+    if uploaded:
+        console.print(f"\n[green]Pushed {len(uploaded)} file(s) to s3://{bucket}/{instance}/[/green]")
+    else:
+        console.print("[yellow]No identity files found in workspace to push.[/yellow]")
+
+
+@identity_app.command("status")
+def identity_status_cmd():
+    """Show which identity files exist locally vs. S3."""
+    from nanobot.config.loader import load_config
+    from nanobot.agent.identity import identity_status
+
+    config = load_config()
+    bucket = config.agents.bucket
+    instance = config.agents.instance
+
+    if not bucket or not instance:
+        console.print("[red]AGENT_BUCKET and AGENT_INSTANCE must be set in .env or config.[/red]")
+        raise typer.Exit(1)
+
+    workspace = config.workspace_path
+    region = os.environ.get("AWS_REGION", "us-east-1")
+
+    results = identity_status(workspace, bucket, instance, region)
+
+    table = Table(show_header=True)
+    table.add_column("File", style="cyan")
+    table.add_column("Local")
+    table.add_column("S3")
+
+    for r in results:
+        local = "[green]✓[/green]" if r["local"] else "[red]✗[/red]"
+        remote = "[green]✓[/green]" if r["remote"] else "[red]✗[/red]"
+        table.add_row(r["filename"], local, remote)
+
+    console.print(f"\nBucket: [cyan]s3://{bucket}/{instance}/[/cyan]")
+    console.print(f"Workspace: [cyan]{workspace}[/cyan]\n")
+    console.print(table)
 
 
 # ============================================================================
