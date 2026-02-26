@@ -1,7 +1,7 @@
 import pytest
 
-from core.cron.service import CronService
-from core.cron.types import CronSchedule
+from core.cron import CronService
+from core.cron import CronSchedule
 
 
 def test_add_job_rejects_unknown_timezone(tmp_path) -> None:

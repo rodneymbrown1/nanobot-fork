@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pathlib import Path
-from core.session.manager import Session, SessionManager
+from core.agent.session import Session, SessionManager
 
 # Test constants
 MEMORY_WINDOW = 50
@@ -487,8 +487,8 @@ class TestConsolidationDeduplicationGuard:
     async def test_consolidation_guard_prevents_duplicate_tasks(self, tmp_path: Path) -> None:
         """Concurrent messages above memory_window spawn only one consolidation task."""
         from core.agent.loop import AgentLoop
-        from core.bus.events import InboundMessage
-        from core.bus.queue import MessageBus
+        from core.bus import InboundMessage
+        from core.bus import MessageBus
         from core.providers.base import LLMResponse
 
         bus = MessageBus()
@@ -531,8 +531,8 @@ class TestConsolidationDeduplicationGuard:
     ) -> None:
         """/new command does not run consolidation concurrently with in-flight consolidation."""
         from core.agent.loop import AgentLoop
-        from core.bus.events import InboundMessage
-        from core.bus.queue import MessageBus
+        from core.bus import InboundMessage
+        from core.bus import MessageBus
         from core.providers.base import LLMResponse
 
         bus = MessageBus()
@@ -583,8 +583,8 @@ class TestConsolidationDeduplicationGuard:
     async def test_consolidation_tasks_are_referenced(self, tmp_path: Path) -> None:
         """create_task results are tracked in _consolidation_tasks while in flight."""
         from core.agent.loop import AgentLoop
-        from core.bus.events import InboundMessage
-        from core.bus.queue import MessageBus
+        from core.bus import InboundMessage
+        from core.bus import MessageBus
         from core.providers.base import LLMResponse
 
         bus = MessageBus()
@@ -628,8 +628,8 @@ class TestConsolidationDeduplicationGuard:
     ) -> None:
         """/new waits for in-flight consolidation and archives before clear."""
         from core.agent.loop import AgentLoop
-        from core.bus.events import InboundMessage
-        from core.bus.queue import MessageBus
+        from core.bus import InboundMessage
+        from core.bus import MessageBus
         from core.providers.base import LLMResponse
 
         bus = MessageBus()
@@ -686,8 +686,8 @@ class TestConsolidationDeduplicationGuard:
     async def test_new_does_not_clear_session_when_archive_fails(self, tmp_path: Path) -> None:
         """/new must keep session data if archive step reports failure."""
         from core.agent.loop import AgentLoop
-        from core.bus.events import InboundMessage
-        from core.bus.queue import MessageBus
+        from core.bus import InboundMessage
+        from core.bus import MessageBus
         from core.providers.base import LLMResponse
 
         bus = MessageBus()
@@ -730,8 +730,8 @@ class TestConsolidationDeduplicationGuard:
     ) -> None:
         """/new should archive only messages not yet consolidated by prior task."""
         from core.agent.loop import AgentLoop
-        from core.bus.events import InboundMessage
-        from core.bus.queue import MessageBus
+        from core.bus import InboundMessage
+        from core.bus import MessageBus
         from core.providers.base import LLMResponse
 
         bus = MessageBus()
@@ -791,8 +791,8 @@ class TestConsolidationDeduplicationGuard:
     ) -> None:
         """/new should remove lock entry for fully invalidated session key."""
         from core.agent.loop import AgentLoop
-        from core.bus.events import InboundMessage
-        from core.bus.queue import MessageBus
+        from core.bus import InboundMessage
+        from core.bus import MessageBus
         from core.providers.base import LLMResponse
 
         bus = MessageBus()

@@ -7,8 +7,8 @@ from typer.testing import CliRunner
 
 from core.cli.commands import app
 from core.config.schema import Config
-from core.providers.litellm_provider import LiteLLMProvider
-from core.providers.openai_codex_provider import _strip_model_prefix
+from core.providers.litellm import LiteLLMProvider
+from core.providers.openai_codex import _strip_model_prefix
 from core.providers.registry import find_by_model
 
 runner = CliRunner()
@@ -20,7 +20,7 @@ def mock_paths():
     with patch("core.config.loader.get_config_path") as mock_cp, \
          patch("core.config.loader.save_config") as mock_sc, \
          patch("core.config.loader.load_config") as mock_lc, \
-         patch("core.utils.helpers.get_workspace_path") as mock_ws:
+         patch("core.utils.get_workspace_path") as mock_ws:
 
         base_dir = Path("./test_onboard_data")
         if base_dir.exists():

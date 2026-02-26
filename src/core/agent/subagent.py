@@ -8,8 +8,8 @@ from typing import Any
 
 from loguru import logger
 
-from core.bus.events import InboundMessage
-from core.bus.queue import MessageBus
+from core.bus import InboundMessage
+from core.bus import MessageBus
 from core.providers.base import LLMProvider
 from core.agent.tools.registry import ToolRegistry
 from core.agent.tools.filesystem import ReadFileTool, WriteFileTool, EditFileTool, ListDirTool

@@ -3,8 +3,8 @@ from datetime import date
 
 import pytest
 
-from core.bus.events import OutboundMessage
-from core.bus.queue import MessageBus
+from core.bus import OutboundMessage
+from core.bus import MessageBus
 from core.channels.email import EmailChannel
 from core.config.schema import EmailConfig
 

@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, Awaitable, Callable
 
 from loguru import logger
 
-from core.utils.helpers import ensure_dir
+from core.utils import ensure_dir
 
 if TYPE_CHECKING:
     from core.providers.base import LLMProvider
-    from core.session.manager import Session
+    from core.agent.session import Session
 
 
 _SAVE_MEMORY_TOOL = [

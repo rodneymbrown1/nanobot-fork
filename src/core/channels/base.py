@@ -5,8 +5,8 @@ from typing import Any
 
 from loguru import logger
 
-from core.bus.events import InboundMessage, OutboundMessage
-from core.bus.queue import MessageBus
+from core.bus import InboundMessage, OutboundMessage
+from core.bus import MessageBus
 
 
 class BaseChannel(ABC):

@@ -22,14 +22,14 @@ from core.agent.tools.registry import ToolRegistry
 from core.agent.tools.shell import ExecTool
 from core.agent.tools.spawn import SpawnTool
 from core.agent.tools.web import WebFetchTool, WebSearchTool
-from core.bus.events import InboundMessage, OutboundMessage
-from core.bus.queue import MessageBus
+from core.bus import InboundMessage, OutboundMessage
+from core.bus import MessageBus
 from core.providers.base import LLMProvider
-from core.session.manager import Session, SessionManager
+from core.agent.session import Session, SessionManager
 
 if TYPE_CHECKING:
     from core.config.schema import AgentsConfig, ChannelsConfig, ExecToolConfig, IntegrationsConfig
-    from core.cron.service import CronService
+    from core.cron import CronService
 
 
 class AgentLoop:

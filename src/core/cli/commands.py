@@ -194,7 +194,7 @@ def onboard():
     """Initialize nanobot configuration and workspace."""
     from core.config.loader import get_config_path, load_config, save_config
     from core.config.schema import Config
-    from core.utils.helpers import get_workspace_path
+    from core.utils import get_workspace_path
     
     config_path = get_config_path()
     
@@ -238,7 +238,7 @@ def _create_workspace_templates(workspace: Path):
     """Create default workspace template files from bundled templates."""
     from importlib.resources import files as pkg_files
 
-    templates_dir = pkg_files("core") / "templates"
+    templates_dir = pkg_files("core.agent") / "templates"
 
     for item in templates_dir.iterdir():
         if not item.name.endswith(".md"):
@@ -267,9 +267,9 @@ def _create_workspace_templates(workspace: Path):
 
 def _make_provider(config: Config):
     """Create the appropriate LLM provider from config."""
-    from core.providers.litellm_provider import LiteLLMProvider
-    from core.providers.openai_codex_provider import OpenAICodexProvider
-    from core.providers.custom_provider import CustomProvider
+    from core.providers.litellm import LiteLLMProvider
+    from core.providers.openai_codex import OpenAICodexProvider
+    from core.providers.custom import CustomProvider
 
     model = config.agents.defaults.model
     provider_name = config.get_provider_name(model)
@@ -315,13 +315,13 @@ def gateway(
 ):
     """Start the nanobot gateway."""
     from core.config.loader import load_config, get_data_dir
-    from core.bus.queue import MessageBus
+    from core.bus import MessageBus
     from core.agent.loop import AgentLoop
     from core.channels.manager import ChannelManager
-    from core.session.manager import SessionManager
-    from core.cron.service import CronService
-    from core.cron.types import CronJob
-    from core.heartbeat.service import HeartbeatService
+    from core.agent.session import SessionManager
+    from core.cron import CronService
+    from core.cron import CronJob
+    from core.heartbeat import HeartbeatService
     
     if verbose:
         import logging
@@ -370,7 +370,7 @@ def gateway(
             chat_id=job.payload.to or "direct",
         )
         if job.payload.deliver and job.payload.to:
-            from core.bus.events import OutboundMessage
+            from core.bus import OutboundMessage
             await bus.publish_outbound(OutboundMessage(
                 channel=job.payload.channel or "cli",
                 chat_id=job.payload.to,
@@ -416,7 +416,7 @@ def gateway(
 
     async def on_heartbeat_notify(response: str) -> None:
         """Deliver a heartbeat response to the user's channel."""
-        from core.bus.events import OutboundMessage
+        from core.bus import OutboundMessage
         channel, chat_id = _pick_heartbeat_target()
         if channel == "cli":
             return  # No external channel available to deliver to
@@ -493,9 +493,9 @@ def agent(
 ):
     """Interact with the agent directly."""
     from core.config.loader import load_config, get_data_dir
-    from core.bus.queue import MessageBus
+    from core.bus import MessageBus
     from core.agent.loop import AgentLoop
-    from core.cron.service import CronService
+    from core.cron import CronService
     from loguru import logger
     
     config = load_config()
@@ -558,7 +558,7 @@ def agent(
         asyncio.run(run_once())
     else:
         # Interactive mode — route through bus like other channels
-        from core.bus.events import InboundMessage
+        from core.bus import InboundMessage
         _init_prompt_session()
         console.print(f"{__logo__} Interactive mode (type [bold]exit[/bold] or [bold]Ctrl+C[/bold] to quit)\n")
 
@@ -930,7 +930,7 @@ def cron_list(
 ):
     """List scheduled jobs."""
     from core.config.loader import get_data_dir
-    from core.cron.service import CronService
+    from core.cron import CronService
     
     store_path = get_data_dir() / "cron" / "jobs.json"
     service = CronService(store_path)
@@ -991,8 +991,8 @@ def cron_add(
 ):
     """Add a scheduled job."""
     from core.config.loader import get_data_dir
-    from core.cron.service import CronService
-    from core.cron.types import CronSchedule
+    from core.cron import CronService
+    from core.cron import CronSchedule
     
     if tz and not cron_expr:
         console.print("[red]Error: --tz can only be used with --cron[/red]")
@@ -1036,7 +1036,7 @@ def cron_remove(
 ):
     """Remove a scheduled job."""
     from core.config.loader import get_data_dir
-    from core.cron.service import CronService
+    from core.cron import CronService
     
     store_path = get_data_dir() / "cron" / "jobs.json"
     service = CronService(store_path)
@@ -1054,7 +1054,7 @@ def cron_enable(
 ):
     """Enable or disable a job."""
     from core.config.loader import get_data_dir
-    from core.cron.service import CronService
+    from core.cron import CronService
     
     store_path = get_data_dir() / "cron" / "jobs.json"
     service = CronService(store_path)
@@ -1075,9 +1075,9 @@ def cron_run(
     """Manually run a job."""
     from loguru import logger
     from core.config.loader import load_config, get_data_dir
-    from core.cron.service import CronService
-    from core.cron.types import CronJob
-    from core.bus.queue import MessageBus
+    from core.cron import CronService
+    from core.cron import CronJob
+    from core.bus import MessageBus
     from core.agent.loop import AgentLoop
     logger.disable("app")
 

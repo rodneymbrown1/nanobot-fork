@@ -12,8 +12,8 @@ from slack_sdk.web.async_client import AsyncWebClient
 
 from slackify_markdown import slackify_markdown
 
-from core.bus.events import OutboundMessage
-from core.bus.queue import MessageBus
+from core.bus import OutboundMessage
+from core.bus import MessageBus
 from core.channels.base import BaseChannel
 from core.config.schema import SlackConfig
 

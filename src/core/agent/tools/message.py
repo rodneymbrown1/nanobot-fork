@@ -3,7 +3,7 @@
 from typing import Any, Awaitable, Callable
 
 from core.agent.tools.base import Tool
-from core.bus.events import OutboundMessage
+from core.bus import OutboundMessage
 
 
 class MessageTool(Tool):

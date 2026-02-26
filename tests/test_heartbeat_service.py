@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from core.heartbeat.service import (
+from core.heartbeat import (
     HEARTBEAT_OK_TOKEN,
     HeartbeatService,
 )

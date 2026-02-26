@@ -3,8 +3,8 @@
 from typing import Any
 
 from core.agent.tools.base import Tool
-from core.cron.service import CronService
-from core.cron.types import CronSchedule
+from core.cron import CronService
+from core.cron import CronSchedule
 
 
 class CronTool(Tool):

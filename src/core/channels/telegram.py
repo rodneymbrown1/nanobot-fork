@@ -9,8 +9,8 @@ from telegram import BotCommand, Update, ReplyParameters
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.request import HTTPXRequest
 
-from core.bus.events import OutboundMessage
-from core.bus.queue import MessageBus
+from core.bus import OutboundMessage
+from core.bus import MessageBus
 from core.channels.base import BaseChannel
 from core.config.schema import TelegramConfig
 
