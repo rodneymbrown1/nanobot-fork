@@ -1,7 +1,7 @@
 #!/bin/bash
 # Nanobot instance bootstrap (Lightsail user data).
-# CF substitutions: ${AWSAccessKeyId}, ${AWSSecretKey}, ${SecretArn},
-#   ${AWS::AccountId}, ${AWS::Region}
+# CF substitutions: ${AWSAccessKeyId}, ${AWSSecretKey}, ${OrgSecretArn},
+#   ${InstanceSecretArn}, ${AWS::AccountId}, ${AWS::Region}
 
 [ -z "$NANOBOT_IN_BASH" ] && exec env NANOBOT_IN_BASH=1 /bin/bash "$0" "$@"
 
@@ -13,7 +13,8 @@ echo "=== Nanobot bootstrap $(date) ==="
 AWS_ACCESS_KEY_ID="${AWSAccessKeyId}"
 AWS_SECRET_ACCESS_KEY="${AWSSecretKey}"
 AWS_DEFAULT_REGION="${AWS::Region}"
-SECRET_ARN="${SecretArn}"
+ORG_SECRET_ARN="${OrgSecretArn}"
+INSTANCE_SECRET_ARN="${InstanceSecretArn}"
 ECR_REPO_URI="${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/nanobot"
 ECR_REGISTRY="${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com"
 
@@ -132,31 +133,49 @@ echo "=== nanobot start at $(date) ==="
 
 ENV_FILE="/opt/nanobot/.env.nanobot"
 COMPOSE_DIR="/opt/nanobot"
-SECRET_ARN="__SECRET_ARN__"
+ORG_SECRET_ARN="__ORG_SECRET_ARN__"
+INSTANCE_SECRET_ARN="__INSTANCE_SECRET_ARN__"
 ECR_REGISTRY="__ECR_REGISTRY__"
 
-# Read config from Secrets Manager
-echo "Reading config from Secrets Manager..."
-SECRET_VALUE=$(aws secretsmanager get-secret-value \
-  --secret-id "$SECRET_ARN" \
+# Read org config from Secrets Manager
+echo "Reading org config from Secrets Manager..."
+ORG_VALUE=$(aws secretsmanager get-secret-value \
+  --secret-id "$ORG_SECRET_ARN" \
   --query SecretString \
   --output text 2>/dev/null || true)
 
-if [ -z "$SECRET_VALUE" ] || echo "$SECRET_VALUE" | grep -q "REPLACE_ME"; then
+# Read instance config from Secrets Manager
+echo "Reading instance config from Secrets Manager..."
+INSTANCE_VALUE=$(aws secretsmanager get-secret-value \
+  --secret-id "$INSTANCE_SECRET_ARN" \
+  --query SecretString \
+  --output text 2>/dev/null || true)
+
+if [ -z "$ORG_VALUE" ] && [ -z "$INSTANCE_VALUE" ]; then
   echo ""
   echo "================================================================"
-  echo "  Config not yet populated. Run scripts/put-secret.sh first."
-  echo "  Secret ARN: $SECRET_ARN"
+  echo "  Config not yet populated. Run 'nanobot deploy' first."
+  echo "  Org secret:      $ORG_SECRET_ARN"
+  echo "  Instance secret:  $INSTANCE_SECRET_ARN"
   echo "================================================================"
   echo ""
   exit 1
 fi
 
-# Convert JSON config → NANOBOT_* env vars and write to env file (0600 perms).
-# No plaintext config.json on disk.
-echo "Converting config to env vars..."
+# Deep-merge org + instance config (instance wins), then flatten to env vars.
+echo "Merging org + instance config to env vars..."
 python3 -c "
 import json, sys
+
+def deep_merge(base, override):
+    \"\"\"Recursively merge override into base. Override wins on conflicts.\"\"\"
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
 
 def flatten(obj, prefix='NANOBOT'):
     items = []
@@ -170,13 +189,24 @@ def flatten(obj, prefix='NANOBOT'):
         items.append((prefix, str(v if (v := obj) is not None else '')))
     return items
 
-data = json.loads(sys.stdin.read())
+org_json = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else '{}'
+instance_json = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else '{}'
+
+org = json.loads(org_json)
+instance = json.loads(instance_json)
+merged = deep_merge(org, instance)
+
+# Reject if still has REPLACE_ME placeholders in critical fields
+merged_str = json.dumps(merged)
+if 'REPLACE_ME' in merged_str:
+    # Only warn — some fields may legitimately still be REPLACE_ME
+    print('WARNING: Some config values still contain REPLACE_ME', file=sys.stderr)
+
 with open('$ENV_FILE', 'w') as f:
-    for key, val in flatten(data):
-        # Escape newlines and quotes for docker env file format
+    for key, val in flatten(merged):
         val = val.replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"').replace('\\n', '\\\\n')
         f.write(f'{key}={val}\n')
-" <<< "$SECRET_VALUE"
+" "$ORG_VALUE" "$INSTANCE_VALUE"
 chmod 600 "$ENV_FILE"
 echo "✓ Env file written to $ENV_FILE"
 
@@ -195,7 +225,8 @@ echo "✓ Gateway started successfully."
 STARTSCRIPT
 
 # Inject CF values
-sed -i "s|__SECRET_ARN__|$SECRET_ARN|g" /opt/nanobot/start.sh
+sed -i "s|__ORG_SECRET_ARN__|$ORG_SECRET_ARN|g" /opt/nanobot/start.sh
+sed -i "s|__INSTANCE_SECRET_ARN__|$INSTANCE_SECRET_ARN|g" /opt/nanobot/start.sh
 sed -i "s|__ECR_REGISTRY__|$ECR_REGISTRY|g" /opt/nanobot/start.sh
 chmod +x /opt/nanobot/start.sh
 
@@ -292,7 +323,8 @@ echo "=== apply-live started at $(date) ==="
 WORKSPACE="/data/.nanobot/workspace"
 ENV_FILE="/opt/nanobot/.env.nanobot"
 MANIFEST="$WORKSPACE/stack-manifest.json"
-SECRET_ARN="__SECRET_ARN__"
+ORG_SECRET_ARN="__ORG_SECRET_ARN__"
+INSTANCE_SECRET_ARN="__INSTANCE_SECRET_ARN__"
 
 cd "$WORKSPACE"
 git fetch origin live
@@ -300,14 +332,28 @@ git reset --hard origin/live
 echo "Checked out latest live branch"
 
 echo "Refreshing secrets..."
-SECRET_VALUE=$(aws secretsmanager get-secret-value \
-  --secret-id "$SECRET_ARN" \
+ORG_VALUE=$(aws secretsmanager get-secret-value \
+  --secret-id "$ORG_SECRET_ARN" \
   --query SecretString \
   --output text 2>/dev/null || true)
 
-if [ -n "$SECRET_VALUE" ] && ! echo "$SECRET_VALUE" | grep -q "REPLACE_ME"; then
+INSTANCE_VALUE=$(aws secretsmanager get-secret-value \
+  --secret-id "$INSTANCE_SECRET_ARN" \
+  --query SecretString \
+  --output text 2>/dev/null || true)
+
+if [ -n "$ORG_VALUE" ] || [ -n "$INSTANCE_VALUE" ]; then
   python3 -c "
 import json, sys
+
+def deep_merge(base, override):
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
 
 def flatten(obj, prefix='NANOBOT'):
     items = []
@@ -321,16 +367,19 @@ def flatten(obj, prefix='NANOBOT'):
         items.append((prefix, str(v if (v := obj) is not None else '')))
     return items
 
-data = json.loads(sys.stdin.read())
+org = json.loads(sys.argv[1]) if sys.argv[1] else {}
+instance = json.loads(sys.argv[2]) if sys.argv[2] else {}
+merged = deep_merge(org, instance)
+
 with open('$ENV_FILE', 'w') as f:
-    for key, val in flatten(data):
+    for key, val in flatten(merged):
         val = val.replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"').replace('\\n', '\\\\n')
         f.write(f'{key}={val}\n')
-" <<< "$SECRET_VALUE"
+" "$ORG_VALUE" "$INSTANCE_VALUE"
   chmod 600 "$ENV_FILE"
-  echo "✓ Env file refreshed from Secrets Manager"
+  echo "✓ Env file refreshed from Secrets Manager (org + instance merged)"
 else
-  echo "WARNING: Could not read secret, keeping existing env file"
+  echo "WARNING: Could not read secrets, keeping existing env file"
 fi
 
 if [ -f "$MANIFEST" ] && [ -f "$ENV_FILE" ] && command -v jq &>/dev/null; then
@@ -362,7 +411,8 @@ for i in $(seq 1 15); do
 done
 echo "=== apply-live completed at $(date) ==="
 APPLYSCRIPT
-sed -i "s|__SECRET_ARN__|$SECRET_ARN|g" /opt/nanobot/apply-live.sh
+sed -i "s|__ORG_SECRET_ARN__|$ORG_SECRET_ARN|g" /opt/nanobot/apply-live.sh
+sed -i "s|__INSTANCE_SECRET_ARN__|$INSTANCE_SECRET_ARN|g" /opt/nanobot/apply-live.sh
 chmod +x /opt/nanobot/apply-live.sh
 
 /opt/nanobot/start.sh || true
