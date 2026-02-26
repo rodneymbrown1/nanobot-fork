@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from nanobot.config.loader import get_config_path, load_config
+from core.config.loader import get_config_path, load_config
 
 
 class TestGetConfigPath:

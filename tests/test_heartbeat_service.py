@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from nanobot.heartbeat.service import (
+from core.heartbeat.service import (
     HEARTBEAT_OK_TOKEN,
     HeartbeatService,
 )

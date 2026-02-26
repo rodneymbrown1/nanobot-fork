@@ -2,7 +2,7 @@
 
 import pytest
 
-from nanobot.agent.tools.shell import ExecTool
+from core.agent.tools.shell import ExecTool
 
 
 @pytest.fixture
