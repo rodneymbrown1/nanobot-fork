@@ -9,7 +9,7 @@ from typing import Any
 
 from loguru import logger
 
-from core.utils.helpers import ensure_dir, safe_filename
+from core.utils import ensure_dir, safe_filename
 
 
 @dataclass
@@ -30,7 +30,7 @@ class Session:
     updated_at: datetime = field(default_factory=datetime.now)
     metadata: dict[str, Any] = field(default_factory=dict)
     last_consolidated: int = 0  # Number of messages already consolidated to files
-    
+
     def add_message(self, role: str, content: str, **kwargs: Any) -> None:
         """Add a message to the session."""
         msg = {
@@ -41,7 +41,7 @@ class Session:
         }
         self.messages.append(msg)
         self.updated_at = datetime.now()
-    
+
     def get_history(self, max_messages: int = 500) -> list[dict[str, Any]]:
         """Return unconsolidated messages for LLM input, aligned to a user turn."""
         unconsolidated = self.messages[self.last_consolidated:]
@@ -61,7 +61,7 @@ class Session:
                     entry[k] = m[k]
             out.append(entry)
         return out
-    
+
     def clear(self) -> None:
         """Clear all messages and reset session to initial state."""
         self.messages = []
@@ -85,7 +85,7 @@ class SessionManager:
         self.sessions_dir = ensure_dir(self.workspace / "sessions")
         self.legacy_sessions_dir = Path.home() / ".nanobot" / "sessions"
         self._cache: dict[str, Session] = {}
-    
+
     def _get_session_path(self, key: str) -> Path:
         """Get the file path for a session."""
         safe_key = safe_filename(key.replace(":", "_"))
@@ -95,7 +95,7 @@ class SessionManager:
         """Legacy global session path (~/.nanobot/sessions/)."""
         safe_key = safe_filename(key.replace(":", "_"))
         return self.legacy_sessions_dir / f"{safe_key}.jsonl"
-    
+
     def get_or_create(self, key: str) -> Session:
         """
         Get an existing session or create a new one.
@@ -137,7 +137,7 @@ class SessionManager:
         if stale:
             logger.info("Evicted {} stale session(s) from cache.", len(stale))
         return len(stale)
-    
+
     def _load(self, key: str) -> Session | None:
         """Load a session from disk."""
         path = self._get_session_path(key)
@@ -184,7 +184,7 @@ class SessionManager:
         except Exception as e:
             logger.warning("Failed to load session {}: {}", key, e)
             return None
-    
+
     def save(self, session: Session) -> None:
         """Save a session to disk."""
         path = self._get_session_path(session.key)
@@ -203,20 +203,20 @@ class SessionManager:
                 f.write(json.dumps(msg, ensure_ascii=False) + "\n")
 
         self._cache[session.key] = session
-    
+
     def invalidate(self, key: str) -> None:
         """Remove a session from the in-memory cache."""
         self._cache.pop(key, None)
-    
+
     def list_sessions(self) -> list[dict[str, Any]]:
         """
         List all sessions.
-        
+
         Returns:
             List of session info dicts.
         """
         sessions = []
-        
+
         for path in self.sessions_dir.glob("*.jsonl"):
             try:
                 # Read just the metadata line
@@ -234,5 +234,5 @@ class SessionManager:
                             })
             except Exception:
                 continue
-        
+
         return sorted(sessions, key=lambda x: x.get("updated_at", ""), reverse=True)
